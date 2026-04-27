@@ -31,6 +31,7 @@ MAIL_TRACKER_FILE = os.path.join(BASE_DIR, "mail_tracker.csv")
 os.makedirs(DOWNLOAD_PATH, exist_ok=True)
 os.makedirs(EDIT_PATH, exist_ok=True)
 
+
 BLACK_BORDER = Border(
     top=Side(border_style="medium", color="000000"),
     bottom=Side(border_style="thin", color="000000"),
@@ -104,7 +105,7 @@ button{
 <body>
 <div class="card">
     <h1>QTTY Recap Downloader</h1>
-    <p>هيقرأ فقط الإيميلات غير المقروءة ويحوّل ملفات Edit فقط</p>
+    <p>يقرأ الإيميلات غير المقروءة فقط ويجهز ملفات Edit للتحميل</p>
     <button onclick="runProcess()">تشغيل الآن</button>
     <div id="result">جاهز للتشغيل ✅</div>
 </div>
@@ -137,18 +138,6 @@ def log(msg):
     print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}", flush=True)
 
 
-def read_tracker_df():
-    return pd.read_csv(
-        get_mail_tracker_file(),
-        dtype={
-            "message_id": str,
-            "file_name": str,
-            "year": str,
-            "page": str
-        }
-    )
-
-
 def decode_mime_text(value):
     if not value:
         return ""
@@ -175,21 +164,46 @@ def clean_filename(filename: str) -> str:
         except UnicodeDecodeError:
             filename = filename.decode("latin-1", errors="replace")
 
-    cleaned = re.sub(r'[\\/*?:"<>|]', "_", filename)
-    return cleaned.strip()
+    return re.sub(r'[\\/*?:"<>|]', "_", filename).strip()
 
 
 def get_mail_tracker_file() -> str:
     if not os.path.exists(MAIL_TRACKER_FILE):
-        df = pd.DataFrame([{
-            "message_id": "startfile",
-            "file_name": "startfile",
-            "year": str(CURRENT_YEAR),
-            "page": "0"
-        }])
+        df = pd.DataFrame([
+            {
+                "message_id": "startfile",
+                "file_name": "startfile",
+                "year": "2025",
+                "page": "7"
+            },
+            {
+                "message_id": "start2026",
+                "file_name": "start2026",
+                "year": "2026",
+                "page": "14"
+            }
+        ])
+        df = df.astype(str)
         df.to_csv(MAIL_TRACKER_FILE, index=False, encoding="utf-8")
 
     return MAIL_TRACKER_FILE
+
+
+def read_tracker_df():
+    return pd.read_csv(
+        get_mail_tracker_file(),
+        dtype={
+            "message_id": str,
+            "file_name": str,
+            "year": str,
+            "page": str
+        }
+    )
+
+
+def save_tracker_df(df):
+    df = df.astype(str)
+    df.to_csv(MAIL_TRACKER_FILE, index=False, encoding="utf-8")
 
 
 def download_attachments() -> list:
@@ -337,11 +351,7 @@ def download_attachments() -> list:
     if new_rows:
         new_df = pd.DataFrame(new_rows).astype(str)
         updated_df = pd.concat([df.astype(str), new_df], ignore_index=True)
-        updated_df["message_id"] = updated_df["message_id"].astype(str)
-        updated_df["file_name"] = updated_df["file_name"].astype(str)
-        updated_df["year"] = updated_df["year"].astype(str)
-        updated_df["page"] = updated_df["page"].astype(str)
-        updated_df.to_csv(MAIL_TRACKER_FILE, index=False, encoding="utf-8")
+        save_tracker_df(updated_df)
 
     mail.close()
     mail.logout()
@@ -352,12 +362,9 @@ def download_attachments() -> list:
 def get_page_title(file_name: str) -> dict:
     df = read_tracker_df()
 
-    df["message_id"] = df["message_id"].astype(str)
-    df["year"] = df["year"].astype(str)
-    df["file_name"] = df["file_name"].astype(str)
-    df["page"] = df["page"].astype(str)
+    file_name = str(file_name)
 
-    file_row = df[df["file_name"] == str(file_name)]
+    file_row = df[df["file_name"] == file_name]
 
     if not file_row.empty:
         file_year_str = str(file_row.iloc[0]["year"])
@@ -387,22 +394,34 @@ def get_page_title(file_name: str) -> dict:
         output_base_name = f"PAGE {next_page}-{file_year_suffix}"
 
         match_index = df[
-            (df["file_name"] == str(file_name)) &
+            (df["file_name"] == file_name) &
             (df["year"] == str(file_year_str))
         ].index
 
         if not match_index.empty:
             df.loc[match_index[0], "page"] = str(next_page)
-            df["message_id"] = df["message_id"].astype(str)
-            df["file_name"] = df["file_name"].astype(str)
-            df["year"] = df["year"].astype(str)
-            df["page"] = df["page"].astype(str)
-            df.to_csv(MAIL_TRACKER_FILE, index=False, encoding="utf-8")
+            save_tracker_df(df)
 
     return {
         "page_title": page_title,
         "file_name": output_base_name
     }
+
+
+def preserve_images(ws):
+    """
+    محاولة الحفاظ على الصور الموجودة داخل الشيت.
+    openpyxl قد لا يكون مثاليًا مع كل أنواع الصور/الشيبس،
+    لكن هذا يحافظ على صور openpyxl قدر الإمكان.
+    """
+    return list(getattr(ws, "_images", []))
+
+
+def restore_images(ws, images):
+    try:
+        ws._images = images
+    except Exception as e:
+        log(f"Image restore warning: {e}")
 
 
 def transform_excel_file(input_file: str, page_title: str, output_file_name: str) -> str | None:
@@ -411,6 +430,8 @@ def transform_excel_file(input_file: str, page_title: str, output_file_name: str
 
         wb = load_workbook(input_file)
         ws = wb.active
+
+        saved_images = preserve_images(ws)
 
         df = pd.read_excel(input_file, engine="openpyxl")
 
@@ -563,6 +584,8 @@ def transform_excel_file(input_file: str, page_title: str, output_file_name: str
                     ws.column_dimensions[col_letter].width = width
                     break
 
+        restore_images(ws, saved_images)
+
         wb.save(output_file_path)
         log(f"Saved transformed file in Edit folder: {output_file_path}")
 
@@ -611,9 +634,9 @@ def run():
         result = process_all()
 
         msg = (
-            f"تم التشغيل بنجاح ✅\n"
-            f"تم تحميل: {result['downloaded']} ملف\n"
-            f"ملفات Edit الجاهزة: {result['edit_files_count']} ملف\n\n"
+            f"تم التشغيل بنجاح ✅\\n"
+            f"تم تحميل: {result['downloaded']} ملف\\n"
+            f"ملفات Edit الجاهزة: {result['edit_files_count']} ملف\\n\\n"
             f"اضغط زر التحميل لتحميل ملفات Edit كملف ZIP."
         )
 
@@ -629,7 +652,7 @@ def run():
 
         return jsonify({
             "success": False,
-            "message": f"حدث خطأ ❌\n{str(e)}"
+            "message": f"حدث خطأ ❌\\n{str(e)}"
         }), 500
 
 
