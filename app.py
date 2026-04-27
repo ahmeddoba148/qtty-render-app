@@ -4,10 +4,12 @@ import imaplib
 import email
 import datetime
 import traceback
+import zipfile
+import io
 import pandas as pd
 
 from email.header import decode_header
-from flask import Flask, jsonify, render_template_string
+from flask import Flask, jsonify, render_template_string, send_file
 
 from openpyxl import load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -87,6 +89,16 @@ button{
     min-height:40px;
     white-space:pre-line;
 }
+.download-btn{
+    display:block;
+    background:#38bdf8;
+    color:white;
+    padding:14px;
+    border-radius:14px;
+    text-decoration:none;
+    font-weight:bold;
+    margin-top:15px;
+}
 </style>
 </head>
 <body>
@@ -104,7 +116,13 @@ async function runProcess(){
     try{
         const res = await fetch("/run");
         const data = await res.json();
-        result.innerText = data.message;
+
+        result.innerHTML = data.message.replaceAll("\\n", "<br>");
+
+        if(data.success && data.download_url){
+            result.innerHTML += '<a class="download-btn" href="' + data.download_url + '">تحميل ملفات Edit</a>';
+        }
+
     }catch(e){
         result.innerText = "حدث خطأ: " + e;
     }
@@ -175,7 +193,6 @@ def download_attachments() -> list:
     mail.login(GMAIL_EMAIL, GMAIL_APP_PASSWORD)
     mail.select("INBOX")
 
-    # مهم: يقرأ فقط الإيميلات غير المقروءة
     status, messages = mail.search(None, 'UNSEEN SUBJECT "Qtty Recap"')
 
     if status != "OK" or not messages or not messages[0]:
@@ -198,8 +215,6 @@ def download_attachments() -> list:
         return []
 
     for num_str in message_ids_to_process:
-        message_processed_successfully = False
-
         try:
             status, msg_data = mail.fetch(num_str.encode(), "(RFC822)")
 
@@ -299,9 +314,7 @@ def download_attachments() -> list:
                     "page": "0"
                 })
 
-            # لو الإيميل اتفحص واتعاملنا معاه، نعلمه مقروء عشان مايتكررش
             if files_saved_from_this_email > 0:
-                message_processed_successfully = True
                 mail.store(num_str.encode(), '+FLAGS', '\\Seen')
                 log(f"Marked email as read: {num_str}")
 
@@ -580,13 +593,14 @@ def run():
             f"تم التشغيل بنجاح ✅\n"
             f"تم تحميل: {result['downloaded']} ملف\n"
             f"ملفات Edit الجاهزة: {result['edit_files_count']} ملف\n\n"
-            f"ملاحظة: أي إرسال لاحق سيتم من ملفات Edit فقط."
+            f"اضغط زر التحميل لتحميل ملفات Edit كملف ZIP."
         )
 
         return jsonify({
             "success": True,
             "message": msg,
-            "edit_files_only": result["edit_files"]
+            "edit_files_only": result["edit_files"],
+            "download_url": "/download-edit"
         })
 
     except Exception as e:
@@ -596,6 +610,38 @@ def run():
             "success": False,
             "message": f"حدث خطأ ❌\n{str(e)}"
         }), 500
+
+
+@app.route("/download-edit")
+def download_edit_files():
+    files = [
+        os.path.join(EDIT_PATH, f)
+        for f in os.listdir(EDIT_PATH)
+        if f.lower().endswith(".xlsx")
+    ]
+
+    if not files:
+        return jsonify({
+            "success": False,
+            "message": "لا توجد ملفات في فولدر Edit للتحميل"
+        }), 404
+
+    memory_file = io.BytesIO()
+
+    with zipfile.ZipFile(memory_file, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for file_path in files:
+            zipf.write(file_path, arcname=os.path.basename(file_path))
+
+    memory_file.seek(0)
+
+    zip_name = f"QTTY_EDIT_FILES_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+
+    return send_file(
+        memory_file,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=zip_name
+    )
 
 
 @app.route("/health")
