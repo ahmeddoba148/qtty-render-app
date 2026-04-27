@@ -49,7 +49,7 @@ HOME_HTML = """
 <style>
 body{
     margin:0;
-    height:100vh;
+    min-height:100vh;
     font-family:Arial,Tahoma,sans-serif;
     background:linear-gradient(135deg,#0f172a,#1e3a8a);
     display:flex;
@@ -137,6 +137,18 @@ def log(msg):
     print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}", flush=True)
 
 
+def read_tracker_df():
+    return pd.read_csv(
+        get_mail_tracker_file(),
+        dtype={
+            "message_id": str,
+            "file_name": str,
+            "year": str,
+            "page": str
+        }
+    )
+
+
 def decode_mime_text(value):
     if not value:
         return ""
@@ -201,7 +213,7 @@ def download_attachments() -> list:
 
     all_message_ids = messages[0].split()
 
-    df = pd.read_csv(get_mail_tracker_file())
+    df = read_tracker_df()
     existing_ids = set(df["message_id"].astype(str).dropna())
 
     message_ids_to_process = [
@@ -308,9 +320,9 @@ def download_attachments() -> list:
                     log(f"Year extraction warning: {e}")
 
                 new_rows.append({
-                    "message_id": num_str,
-                    "file_name": clean_name,
-                    "year": file_year_str,
+                    "message_id": str(num_str),
+                    "file_name": str(clean_name),
+                    "year": str(file_year_str),
                     "page": "0"
                 })
 
@@ -323,8 +335,12 @@ def download_attachments() -> list:
             log(traceback.format_exc())
 
     if new_rows:
-        new_df = pd.DataFrame(new_rows)
-        updated_df = pd.concat([df, new_df], ignore_index=True)
+        new_df = pd.DataFrame(new_rows).astype(str)
+        updated_df = pd.concat([df.astype(str), new_df], ignore_index=True)
+        updated_df["message_id"] = updated_df["message_id"].astype(str)
+        updated_df["file_name"] = updated_df["file_name"].astype(str)
+        updated_df["year"] = updated_df["year"].astype(str)
+        updated_df["page"] = updated_df["page"].astype(str)
         updated_df.to_csv(MAIL_TRACKER_FILE, index=False, encoding="utf-8")
 
     mail.close()
@@ -334,13 +350,14 @@ def download_attachments() -> list:
 
 
 def get_page_title(file_name: str) -> dict:
-    df = pd.read_csv(get_mail_tracker_file())
+    df = read_tracker_df()
 
     df["message_id"] = df["message_id"].astype(str)
     df["year"] = df["year"].astype(str)
     df["file_name"] = df["file_name"].astype(str)
+    df["page"] = df["page"].astype(str)
 
-    file_row = df[df["file_name"] == file_name]
+    file_row = df[df["file_name"] == str(file_name)]
 
     if not file_row.empty:
         file_year_str = str(file_row.iloc[0]["year"])
@@ -370,12 +387,16 @@ def get_page_title(file_name: str) -> dict:
         output_base_name = f"PAGE {next_page}-{file_year_suffix}"
 
         match_index = df[
-            (df["file_name"] == file_name) &
-            (df["year"] == file_year_str)
+            (df["file_name"] == str(file_name)) &
+            (df["year"] == str(file_year_str))
         ].index
 
         if not match_index.empty:
             df.loc[match_index[0], "page"] = str(next_page)
+            df["message_id"] = df["message_id"].astype(str)
+            df["file_name"] = df["file_name"].astype(str)
+            df["year"] = df["year"].astype(str)
+            df["page"] = df["page"].astype(str)
             df.to_csv(MAIL_TRACKER_FILE, index=False, encoding="utf-8")
 
     return {
