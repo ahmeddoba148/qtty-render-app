@@ -1,15 +1,17 @@
 import os
 import re
+import json
 import imaplib
 import email
 import datetime
 import traceback
-import zipfile
-import io
 import pandas as pd
 
 from email.header import decode_header
-from flask import Flask, jsonify, render_template_string, send_file
+from flask import Flask, jsonify, render_template_string, send_file, send_from_directory, request
+
+import gspread
+from google.oauth2.service_account import Credentials
 
 from openpyxl import load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -20,13 +22,14 @@ app = Flask(__name__)
 
 GMAIL_EMAIL = os.environ.get("GMAIL_EMAIL", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
+GOOGLE_CREDS_JSON = os.environ.get("GOOGLE_CREDS_JSON", "")
+GOOGLE_SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "mail_tracker")
 
 CURRENT_YEAR = datetime.datetime.now().year
 BASE_DIR = os.getcwd()
 
 DOWNLOAD_PATH = os.path.join(BASE_DIR, "QTTY_RECAPS")
 EDIT_PATH = os.path.join(DOWNLOAD_PATH, "Edit")
-MAIL_TRACKER_FILE = os.path.join(BASE_DIR, "mail_tracker.csv")
 
 os.makedirs(DOWNLOAD_PATH, exist_ok=True)
 os.makedirs(EDIT_PATH, exist_ok=True)
@@ -48,6 +51,7 @@ HOME_HTML = """
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QTTY Recap</title>
 <style>
+*{box-sizing:border-box}
 body{
     margin:0;
     min-height:100vh;
@@ -59,8 +63,8 @@ body{
     color:white;
 }
 .card{
-    width:90%;
-    max-width:420px;
+    width:94%;
+    max-width:620px;
     background:rgba(255,255,255,0.12);
     border:1px solid rgba(255,255,255,0.2);
     border-radius:28px;
@@ -68,64 +72,208 @@ body{
     text-align:center;
     box-shadow:0 20px 60px rgba(0,0,0,0.35);
 }
-h1{font-size:26px;margin-bottom:10px}
-p{opacity:.85}
+h1{font-size:28px;margin-bottom:10px}
+p{opacity:.9;line-height:1.7}
 button{
-    width:100%;
-    padding:18px;
     border:0;
-    border-radius:18px;
-    background:#22c55e;
+    border-radius:14px;
     color:white;
-    font-size:22px;
+    font-size:17px;
     font-weight:bold;
     cursor:pointer;
-    margin-top:20px;
+}
+.run-btn{
+    width:100%;
+    padding:18px;
+    background:#22c55e;
+    font-size:22px;
+    margin-top:18px;
 }
 #result{
     margin-top:20px;
     background:rgba(0,0,0,0.25);
     border-radius:16px;
     padding:15px;
-    min-height:40px;
+    min-height:50px;
     white-space:pre-line;
+    text-align:center;
 }
-.download-btn{
-    display:block;
-    background:#38bdf8;
-    color:white;
+.file-card{
+    margin-top:14px;
+    background:rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:16px;
     padding:14px;
-    border-radius:14px;
+    text-align:right;
+}
+.file-name{
+    font-size:14px;
+    opacity:.95;
+    word-break:break-all;
+    margin-bottom:12px;
+}
+.actions{
+    display:flex;
+    gap:8px;
+    justify-content:center;
+    flex-wrap:wrap;
+}
+.download-btn,.edit-btn,.save-btn,.cancel-btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    padding:11px 14px;
+    border-radius:12px;
     text-decoration:none;
     font-weight:bold;
-    margin-top:15px;
+    color:white;
+    min-width:92px;
+}
+.download-btn{background:#38bdf8}
+.edit-btn{background:#f59e0b}
+.save-btn{background:#22c55e}
+.cancel-btn{background:#64748b}
+.edit-box{
+    margin-top:12px;
+    display:none;
+    background:rgba(0,0,0,.22);
+    border-radius:14px;
+    padding:12px;
+}
+.inputs{
+    display:flex;
+    gap:8px;
+    margin-bottom:10px;
+}
+input{
+    width:100%;
+    padding:12px;
+    border-radius:10px;
+    border:1px solid rgba(255,255,255,.25);
+    background:rgba(255,255,255,.12);
+    color:white;
+    font-size:16px;
+    text-align:center;
+}
+input::placeholder{color:rgba(255,255,255,.65)}
+.small-note{
+    font-size:13px;
+    opacity:.8;
+    margin-top:8px;
 }
 </style>
 </head>
 <body>
 <div class="card">
-    <h1>QTTY Recap Downloader</h1>
-    <p>يقرأ الإيميلات غير المقروءة فقط ويجهز ملفات Edit للتحميل</p>
-    <button onclick="runProcess()">تشغيل الآن</button>
+    <h1>QTTY Recap</h1>
+    <p>يقرأ الإيميلات الجديدة، يجهز ملفات الإكسيل، ويرقم الصفحات تلقائيًا من Google Sheet.</p>
+    <button class="run-btn" onclick="runProcess()">تشغيل الآن</button>
     <div id="result">جاهز للتشغيل ✅</div>
+    <div id="files"></div>
 </div>
 
 <script>
+function escapeHtml(text){
+    return String(text)
+        .replaceAll("&","&amp;")
+        .replaceAll("<","&lt;")
+        .replaceAll(">","&gt;")
+        .replaceAll('"',"&quot;")
+        .replaceAll("'","&#039;");
+}
+
+function showEditBox(id){
+    document.getElementById("edit-box-" + id).style.display = "block";
+}
+
+function hideEditBox(id){
+    document.getElementById("edit-box-" + id).style.display = "none";
+}
+
+async function savePageNumber(id, filename){
+    const page = document.getElementById("page-" + id).value.trim();
+    const year = document.getElementById("year-" + id).value.trim();
+
+    if(!page || !year){
+        alert("اكتب رقم الصفحة والسنة");
+        return;
+    }
+
+    const res = await fetch("/update-page", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({filename, page, year})
+    });
+
+    const data = await res.json();
+
+    if(!data.success){
+        alert(data.message || "حدث خطأ أثناء تعديل رقم الصفحة");
+        return;
+    }
+
+    const card = document.getElementById("file-card-" + id);
+    card.querySelector(".file-name").innerText = data.filename;
+    card.querySelector(".download-btn").href = data.download_url;
+    card.querySelector(".edit-btn").setAttribute("onclick", "showEditBox('" + id + "')");
+    card.dataset.filename = data.filename;
+
+    hideEditBox(id);
+    alert("تم تعديل رقم الصفحة داخل ملف الإكسيل ✅");
+}
+
+function renderFiles(files){
+    const box = document.getElementById("files");
+    box.innerHTML = "";
+
+    files.forEach((file, index) => {
+        const id = "f" + index;
+        const safeName = escapeHtml(file.name);
+        const page = escapeHtml(file.page || "");
+        const year = escapeHtml(file.year || "");
+
+        box.innerHTML += `
+            <div class="file-card" id="file-card-${id}" data-filename="${safeName}">
+                <div class="file-name">${safeName}</div>
+                <div class="actions">
+                    <a class="download-btn" href="${file.download_url}">⬇️ تحميل</a>
+                    <button class="edit-btn" onclick="showEditBox('${id}')">✏️ تعديل</button>
+                </div>
+                <div class="edit-box" id="edit-box-${id}">
+                    <div class="inputs">
+                        <input id="page-${id}" type="number" min="1" placeholder="رقم الصفحة" value="${page}">
+                        <input id="year-${id}" type="number" min="2000" placeholder="السنة" value="${year}">
+                    </div>
+                    <div class="actions">
+                        <button class="save-btn" onclick="savePageNumber('${id}', '${safeName}')">حفظ</button>
+                        <button class="cancel-btn" onclick="hideEditBox('${id}')">إلغاء</button>
+                    </div>
+                    <div class="small-note">التعديل يغيّر عنوان الصفحة داخل هذا الملف فقط ولا يغيّر عداد Google Sheet.</div>
+                </div>
+            </div>
+        `;
+    });
+}
+
 async function runProcess(){
     const result = document.getElementById("result");
+    const filesBox = document.getElementById("files");
     result.innerText = "جاري التشغيل... انتظر";
+    filesBox.innerHTML = "";
+
     try{
         const res = await fetch("/run");
         const data = await res.json();
 
         result.innerHTML = data.message.replaceAll("\\n", "<br>");
 
-        if(data.success && data.download_url){
-            result.innerHTML += '<a class="download-btn" href="' + data.download_url + '">تحميل ملفات Edit</a>';
+        if(data.success && data.files && data.files.length){
+            renderFiles(data.files);
         }
 
     }catch(e){
-        result.innerText = "حدث خطأ: " + e;
+        result.innerText = "حدث خطأ أثناء التشغيل: " + e;
     }
 }
 </script>
@@ -167,51 +315,180 @@ def clean_filename(filename: str) -> str:
     return re.sub(r'[\\/*?:"<>|]', "_", filename).strip()
 
 
-def get_mail_tracker_file() -> str:
-    if not os.path.exists(MAIL_TRACKER_FILE):
-        df = pd.DataFrame([
-            {
-                "message_id": "startfile",
-                "file_name": "startfile",
-                "year": "2025",
-                "page": "7"
-            },
-            {
-                "message_id": "start2026",
-                "file_name": "start2026",
-                "year": "2026",
-                "page": "14"
-            }
-        ])
-        df = df.astype(str)
-        df.to_csv(MAIL_TRACKER_FILE, index=False, encoding="utf-8")
-
-    return MAIL_TRACKER_FILE
+def safe_download_filename(filename: str) -> str:
+    filename = os.path.basename(str(filename))
+    filename = clean_filename(filename)
+    if not filename.lower().endswith(".xlsx"):
+        raise Exception("اسم الملف غير صالح")
+    return filename
 
 
-def read_tracker_df():
-    return pd.read_csv(
-        get_mail_tracker_file(),
-        dtype={
-            "message_id": str,
-            "file_name": str,
-            "year": str,
-            "page": str
-        }
+def get_google_sheet():
+    if not GOOGLE_CREDS_JSON:
+        raise Exception("متغير GOOGLE_CREDS_JSON غير موجود في Render Environment Variables")
+
+    creds_dict = json.loads(GOOGLE_CREDS_JSON)
+
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    client = gspread.authorize(creds)
+
+    return client.open(GOOGLE_SHEET_NAME).sheet1
+
+
+def ensure_sheet_structure(sheet):
+    values = sheet.get_all_values()
+
+    if not values:
+        sheet.update("A1:B1", [["year", "page"]])
+        sheet.update("D1:H1", [["message_id", "file_name", "year", "page", "created_at"]])
+        return
+
+    if len(values[0]) < 2 or values[0][0].strip().lower() != "year":
+        sheet.update("A1:B1", [["year", "page"]])
+
+    current_headers = sheet.row_values(1)
+
+    if len(current_headers) < 8 or current_headers[3].strip().lower() != "message_id":
+        sheet.update("D1:H1", [["message_id", "file_name", "year", "page", "created_at"]])
+
+
+def get_year_rows(sheet):
+    ensure_sheet_structure(sheet)
+    rows = sheet.get_all_records(expected_headers=["year", "page"])
+    clean_rows = []
+
+    for index, row in enumerate(rows, start=2):
+        year = str(row.get("year", "")).strip()
+        page = str(row.get("page", "")).strip()
+
+        if year and year.isdigit():
+            try:
+                page_num = int(float(page)) if page else 0
+            except Exception:
+                page_num = 0
+
+            clean_rows.append({
+                "row_index": index,
+                "year": year,
+                "page": page_num
+            })
+
+    return clean_rows
+
+
+def get_next_page_for_year(file_year: int) -> dict:
+    sheet = get_google_sheet()
+    ensure_sheet_structure(sheet)
+
+    year_str = str(file_year)
+    suffix = year_str[-2:]
+
+    rows = get_year_rows(sheet)
+    target = None
+
+    for row in rows:
+        if row["year"] == year_str:
+            target = row
+            break
+
+    if target is None:
+        next_empty_row = len(rows) + 2
+        sheet.update(f"A{next_empty_row}:B{next_empty_row}", [[year_str, 0]])
+        current_page = 0
+        row_index = next_empty_row
+    else:
+        current_page = target["page"]
+        row_index = target["row_index"]
+
+    next_page = current_page + 1
+    sheet.update(f"B{row_index}", [[next_page]])
+
+    return {
+        "page": next_page,
+        "year": year_str,
+        "suffix": suffix,
+        "page_title": f"PAGE {next_page}/{suffix}",
+        "file_name": f"PAGE {next_page}-{suffix}"
+    }
+
+
+def get_processed_message_ids() -> set:
+    sheet = get_google_sheet()
+    ensure_sheet_structure(sheet)
+
+    values = sheet.col_values(4)
+    return set(v.strip() for v in values[1:] if str(v).strip())
+
+
+def append_processed_log(message_id: str, file_name: str, year: str, page: str):
+    sheet = get_google_sheet()
+    ensure_sheet_structure(sheet)
+
+    created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    sheet.append_row(
+        [message_id, file_name, year, page, created_at],
+        table_range="D1:H1",
+        value_input_option="USER_ENTERED"
     )
 
 
-def save_tracker_df(df):
-    df = df.astype(str)
-    df.to_csv(MAIL_TRACKER_FILE, index=False, encoding="utf-8")
+def extract_file_year_from_excel(filepath: str, fallback_year: int) -> int:
+    file_year = fallback_year
+
+    try:
+        wb_temp = load_workbook(filepath, read_only=True, data_only=True)
+        ws_temp = wb_temp.active
+
+        target_col_idx = None
+
+        for cell in ws_temp[1]:
+            if cell.value and "delivery date" in str(cell.value).lower():
+                target_col_idx = cell.column
+                break
+
+        if target_col_idx:
+            cell_val = ws_temp.cell(row=2, column=target_col_idx).value
+
+            if cell_val:
+                extracted_suffix = None
+
+                if isinstance(cell_val, (datetime.datetime, datetime.date)):
+                    return int(cell_val.year)
+                else:
+                    digits = re.findall(r"\d", str(cell_val))
+                    if len(digits) >= 2:
+                        extracted_suffix = "".join(digits[-2:])
+
+                if extracted_suffix:
+                    file_year = int("20" + extracted_suffix)
+
+        wb_temp.close()
+
+    except Exception as e:
+        log(f"Year extraction warning: {e}")
+
+    return file_year
+
+
+def get_message_real_id(msg, fallback_id: str) -> str:
+    real_id = msg.get("Message-ID", "")
+    if real_id:
+        return real_id.strip()
+    return str(fallback_id)
 
 
 def download_attachments() -> list:
     if not GMAIL_EMAIL or not GMAIL_APP_PASSWORD:
-        raise Exception("GMAIL_EMAIL أو GMAIL_APP_PASSWORD غير موجودين في Environment Variables")
+        raise Exception("GMAIL_EMAIL أو GMAIL_APP_PASSWORD غير موجودين في Render Environment Variables")
 
     downloaded_files = []
-    new_rows = []
+    processed_ids = get_processed_message_ids()
 
     log("Connecting to Gmail...")
 
@@ -227,32 +504,28 @@ def download_attachments() -> list:
 
     all_message_ids = messages[0].split()
 
-    df = read_tracker_df()
-    existing_ids = set(df["message_id"].astype(str).dropna())
+    for num_bytes in all_message_ids:
+        num_str = num_bytes.decode()
 
-    message_ids_to_process = [
-        msg_id.decode()
-        for msg_id in all_message_ids
-        if msg_id.decode() not in existing_ids
-    ]
-
-    if not message_ids_to_process:
-        mail.logout()
-        return []
-
-    for num_str in message_ids_to_process:
         try:
-            status, msg_data = mail.fetch(num_str.encode(), "(RFC822)")
+            status, msg_data = mail.fetch(num_bytes, "(RFC822)")
 
             if status != "OK" or not msg_data or not msg_data[0]:
                 continue
 
             msg = email.message_from_bytes(msg_data[0][1])
+            real_message_id = get_message_real_id(msg, num_str)
+
+            if real_message_id in processed_ids:
+                log(f"Skipped already processed email: {real_message_id}")
+                mail.store(num_bytes, '+FLAGS', '\\Seen')
+                continue
+
             subject = decode_mime_text(msg.get("Subject", ""))
             log(f"Processing email: {subject}")
 
             date_str = msg.get("Date", "")
-            file_year = CURRENT_YEAR
+            fallback_year = CURRENT_YEAR
             local_date_prefix = datetime.datetime.now().strftime("%Y%m%d")
 
             if date_str:
@@ -261,12 +534,11 @@ def download_attachments() -> list:
                     if date_tuple:
                         local_timestamp = email.utils.mktime_tz(date_tuple)
                         local_dt = datetime.datetime.fromtimestamp(local_timestamp)
-                        file_year = local_dt.year
+                        fallback_year = local_dt.year
                         local_date_prefix = local_dt.strftime("%Y%m%d")
                 except Exception:
                     pass
 
-            file_year_str = str(file_year)
             files_saved_from_this_email = 0
 
             for part in msg.walk():
@@ -297,61 +569,26 @@ def download_attachments() -> list:
                 with open(filepath, "wb") as f:
                     f.write(payload)
 
-                downloaded_files.append(filepath)
+                file_year = extract_file_year_from_excel(filepath, fallback_year)
+
+                downloaded_files.append({
+                    "path": filepath,
+                    "file_name": clean_name,
+                    "year": file_year,
+                    "message_id": real_message_id
+                })
+
                 files_saved_from_this_email += 1
                 log(f"Downloaded: {clean_name}")
 
-                try:
-                    wb_temp = load_workbook(filepath, read_only=True, data_only=True)
-                    ws_temp = wb_temp.active
-
-                    target_col_idx = None
-
-                    for cell in ws_temp[1]:
-                        if cell.value and "delivery date" in str(cell.value).lower():
-                            target_col_idx = cell.column
-                            break
-
-                    if target_col_idx:
-                        cell_val = ws_temp.cell(row=2, column=target_col_idx).value
-
-                        if cell_val:
-                            extracted_suffix = None
-
-                            if isinstance(cell_val, (datetime.datetime, datetime.date)):
-                                extracted_suffix = str(cell_val.year)[-2:]
-                            else:
-                                digits = re.findall(r"\d", str(cell_val))
-                                if len(digits) >= 2:
-                                    extracted_suffix = "".join(digits[-2:])
-
-                            if extracted_suffix:
-                                file_year_str = "20" + extracted_suffix
-
-                    wb_temp.close()
-
-                except Exception as e:
-                    log(f"Year extraction warning: {e}")
-
-                new_rows.append({
-                    "message_id": str(num_str),
-                    "file_name": str(clean_name),
-                    "year": str(file_year_str),
-                    "page": "0"
-                })
-
             if files_saved_from_this_email > 0:
-                mail.store(num_str.encode(), '+FLAGS', '\\Seen')
+                mail.store(num_bytes, '+FLAGS', '\\Seen')
+                processed_ids.add(real_message_id)
                 log(f"Marked email as read: {num_str}")
 
         except Exception as e:
             log(f"Error processing email {num_str}: {e}")
             log(traceback.format_exc())
-
-    if new_rows:
-        new_df = pd.DataFrame(new_rows).astype(str)
-        updated_df = pd.concat([df.astype(str), new_df], ignore_index=True)
-        save_tracker_df(updated_df)
 
     mail.close()
     mail.logout()
@@ -359,61 +596,7 @@ def download_attachments() -> list:
     return downloaded_files
 
 
-def get_page_title(file_name: str) -> dict:
-    df = read_tracker_df()
-
-    file_name = str(file_name)
-
-    file_row = df[df["file_name"] == file_name]
-
-    if not file_row.empty:
-        file_year_str = str(file_row.iloc[0]["year"])
-    else:
-        file_year_str = str(CURRENT_YEAR)
-
-    page_title = "PAGE 00/00"
-    output_base_name = file_name.replace(".xlsx", "").replace(".xls", "")
-    is_update = "updated" in file_name.lower()
-
-    if is_update:
-        page_title = "PAGE 00/00"
-        output_base_name = f"{output_base_name}_updated"
-    else:
-        try:
-            year_pages = pd.to_numeric(
-                df[df["year"] == file_year_str]["page"],
-                errors="coerce"
-            )
-            max_page = year_pages.max()
-            next_page = int(max_page + 1) if pd.notna(max_page) else 1
-        except Exception:
-            next_page = 1
-
-        file_year_suffix = file_year_str[-2:]
-        page_title = f"PAGE {next_page}/{file_year_suffix}"
-        output_base_name = f"PAGE {next_page}-{file_year_suffix}"
-
-        match_index = df[
-            (df["file_name"] == file_name) &
-            (df["year"] == str(file_year_str))
-        ].index
-
-        if not match_index.empty:
-            df.loc[match_index[0], "page"] = str(next_page)
-            save_tracker_df(df)
-
-    return {
-        "page_title": page_title,
-        "file_name": output_base_name
-    }
-
-
 def preserve_images(ws):
-    """
-    محاولة الحفاظ على الصور الموجودة داخل الشيت.
-    openpyxl قد لا يكون مثاليًا مع كل أنواع الصور/الشيبس،
-    لكن هذا يحافظ على صور openpyxl قدر الإمكان.
-    """
     return list(getattr(ws, "_images", []))
 
 
@@ -422,6 +605,21 @@ def restore_images(ws, images):
         ws._images = images
     except Exception as e:
         log(f"Image restore warning: {e}")
+
+
+def set_sheet_page_title(excel_file_path: str, page: int, year: int):
+    wb = load_workbook(excel_file_path)
+    ws = wb.active
+
+    suffix = str(year)[-2:]
+
+    ws.cell(row=1, column=1).value = f"PAGE {page}/{suffix}"
+
+    title_cell = ws.cell(row=1, column=1)
+    title_cell.font = Font(name="Arial", color="FF0000", bold=True, size=36)
+    title_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    wb.save(excel_file_path)
 
 
 def transform_excel_file(input_file: str, page_title: str, output_file_name: str) -> str | None:
@@ -587,7 +785,7 @@ def transform_excel_file(input_file: str, page_title: str, output_file_name: str
         restore_images(ws, saved_images)
 
         wb.save(output_file_path)
-        log(f"Saved transformed file in Edit folder: {output_file_path}")
+        log(f"Saved transformed file: {output_file_path}")
 
         return output_file_path
 
@@ -597,15 +795,30 @@ def transform_excel_file(input_file: str, page_title: str, output_file_name: str
         return None
 
 
+def parse_page_year_from_filename(filename: str):
+    match = re.search(r"PAGE\s+(\d+)-(\d{2})", filename, re.IGNORECASE)
+    if not match:
+        return "", ""
+
+    page = match.group(1)
+    suffix = match.group(2)
+    year = "20" + suffix
+
+    return page, year
+
+
 def process_all():
     downloaded_files = download_attachments()
 
-    edit_files_only = []
+    edit_files = []
 
-    for file_path in downloaded_files:
-        file_name = os.path.basename(file_path)
+    for item in downloaded_files:
+        file_path = item["path"]
+        file_year = int(item["year"])
+        original_file_name = item["file_name"]
+        message_id = item["message_id"]
 
-        page_data = get_page_title(file_name)
+        page_data = get_next_page_for_year(file_year)
 
         transformed_file = transform_excel_file(
             input_file=file_path,
@@ -614,12 +827,26 @@ def process_all():
         )
 
         if transformed_file:
-            edit_files_only.append(transformed_file)
+            final_name = os.path.basename(transformed_file)
+
+            append_processed_log(
+                message_id=message_id,
+                file_name=original_file_name,
+                year=str(file_year),
+                page=str(page_data["page"])
+            )
+
+            edit_files.append({
+                "name": final_name,
+                "page": page_data["page"],
+                "year": file_year,
+                "download_url": f"/download-file/{final_name}"
+            })
 
     return {
         "downloaded": len(downloaded_files),
-        "edit_files_count": len(edit_files_only),
-        "edit_files": edit_files_only
+        "edit_files_count": len(edit_files),
+        "edit_files": edit_files
     }
 
 
@@ -633,18 +860,23 @@ def run():
     try:
         result = process_all()
 
-        msg = (
-            f"تم التشغيل بنجاح ✅\\n"
-            f"تم تحميل: {result['downloaded']} ملف\\n"
-            f"ملفات Edit الجاهزة: {result['edit_files_count']} ملف\\n\\n"
-            f"اضغط زر التحميل لتحميل ملفات Edit كملف ZIP."
-        )
+        if result["edit_files_count"] == 0:
+            msg = (
+                "تم التشغيل بنجاح ✅\\n"
+                "لا توجد ملفات إكسيل جديدة جاهزة للتحميل الآن."
+            )
+        else:
+            msg = (
+                "تم التشغيل بنجاح ✅\\n"
+                f"تم تحميل {result['downloaded']} ملف من الإيميل.\\n"
+                f"تم تجهيز {result['edit_files_count']} ملف إكسيل.\\n\\n"
+                "يمكنك تحميل كل ملف مباشرة أو تعديل رقم الصفحة قبل التحميل."
+            )
 
         return jsonify({
             "success": True,
             "message": msg,
-            "edit_files_only": result["edit_files"],
-            "download_url": "/download-edit"
+            "files": result["edit_files"]
         })
 
     except Exception as e:
@@ -656,36 +888,67 @@ def run():
         }), 500
 
 
-@app.route("/download-edit")
-def download_edit_files():
-    files = [
-        os.path.join(EDIT_PATH, f)
-        for f in os.listdir(EDIT_PATH)
-        if f.lower().endswith(".xlsx")
-    ]
-
-    if not files:
+@app.route("/download-file/<filename>")
+def download_file(filename):
+    try:
+        safe_name = safe_download_filename(filename)
+        return send_from_directory(
+            EDIT_PATH,
+            safe_name,
+            as_attachment=True
+        )
+    except Exception as e:
         return jsonify({
             "success": False,
-            "message": "لا توجد ملفات في فولدر Edit للتحميل"
-        }), 404
+            "message": str(e)
+        }), 400
 
-    memory_file = io.BytesIO()
 
-    with zipfile.ZipFile(memory_file, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for file_path in files:
-            zipf.write(file_path, arcname=os.path.basename(file_path))
+@app.route("/update-page", methods=["POST"])
+def update_page():
+    try:
+        data = request.get_json(force=True)
 
-    memory_file.seek(0)
+        old_filename = safe_download_filename(data.get("filename", ""))
+        page = int(data.get("page", 0))
+        year = int(data.get("year", 0))
 
-    zip_name = f"QTTY_EDIT_FILES_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        if page <= 0:
+            raise Exception("رقم الصفحة غير صالح")
 
-    return send_file(
-        memory_file,
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name=zip_name
-    )
+        if year < 2000 or year > 2099:
+            raise Exception("السنة غير صالحة")
+
+        old_path = os.path.join(EDIT_PATH, old_filename)
+
+        if not os.path.exists(old_path):
+            raise Exception("الملف غير موجود")
+
+        suffix = str(year)[-2:]
+        new_filename = f"PAGE {page}-{suffix}_edit.xlsx"
+        new_path = os.path.join(EDIT_PATH, new_filename)
+
+        if old_path != new_path:
+            os.replace(old_path, new_path)
+
+        set_sheet_page_title(new_path, page, year)
+
+        return jsonify({
+            "success": True,
+            "message": "تم تعديل رقم الصفحة داخل الملف بنجاح",
+            "filename": new_filename,
+            "page": page,
+            "year": year,
+            "download_url": f"/download-file/{new_filename}"
+        })
+
+    except Exception as e:
+        log(traceback.format_exc())
+
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 400
 
 
 @app.route("/health")
