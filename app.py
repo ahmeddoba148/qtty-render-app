@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import hashlib
 import imaplib
 import email
 import datetime
@@ -191,7 +192,9 @@ function hideEditBox(id){
     document.getElementById("edit-box-" + id).style.display = "none";
 }
 
-async function savePageNumber(id, filename){
+async function savePageNumber(id){
+    const card = document.getElementById("file-card-" + id);
+    const filename = card.dataset.filename;
     const page = document.getElementById("page-" + id).value.trim();
     const year = document.getElementById("year-" + id).value.trim();
 
@@ -213,7 +216,7 @@ async function savePageNumber(id, filename){
         return;
     }
 
-    const card = document.getElementById("file-card-" + id);
+    card.dataset.filename = data.filename;
     card.querySelector(".file-name").innerText = data.filename;
     card.querySelector(".download-btn").href = data.download_url;
 
@@ -232,7 +235,7 @@ function renderFiles(files){
         const year = escapeHtml(file.year || "");
 
         box.innerHTML += `
-            <div class="file-card" id="file-card-${id}">
+            <div class="file-card" id="file-card-${id}" data-filename="${safeName}">
                 <div class="file-name">${safeName}</div>
                 <div class="actions">
                     <a class="download-btn" href="${file.download_url}">⬇️ تحميل</a>
@@ -244,7 +247,7 @@ function renderFiles(files){
                         <input id="year-${id}" type="number" min="2000" placeholder="السنة" value="${year}">
                     </div>
                     <div class="actions">
-                        <button class="save-btn" onclick="savePageNumber('${id}', '${safeName}')">حفظ</button>
+                        <button class="save-btn" onclick="savePageNumber('${id}')">حفظ</button>
                         <button class="cancel-btn" onclick="hideEditBox('${id}')">إلغاء</button>
                     </div>
                     <div class="small-note">التعديل يغيّر عنوان الصفحة داخل هذا الملف فقط ولا يغيّر عداد Google Sheet.</div>
@@ -321,6 +324,10 @@ def safe_download_filename(filename: str) -> str:
     return filename
 
 
+def get_file_hash(payload: bytes) -> str:
+    return hashlib.sha256(payload).hexdigest()
+
+
 def get_google_sheet():
     if not GOOGLE_CREDS_JSON:
         raise Exception("متغير GOOGLE_CREDS_JSON غير موجود في Render Environment Variables")
@@ -340,7 +347,7 @@ def get_google_sheet():
 
 def ensure_sheet_structure(sheet):
     sheet.update("A1:B1", [["year", "page"]])
-    sheet.update("D1:H1", [["message_id", "file_name", "year", "page", "created_at"]])
+    sheet.update("D1:I1", [["message_id", "file_name", "year", "page", "file_hash", "created_at"]])
 
 
 def get_year_rows(sheet):
@@ -393,12 +400,8 @@ def get_next_page_for_year(file_year: int) -> dict:
             break
 
     if target is None:
-        next_empty_row = 2
-
         used_rows = sheet.col_values(1)
-        if len(used_rows) >= 2:
-            next_empty_row = len(used_rows) + 1
-
+        next_empty_row = len(used_rows) + 1 if len(used_rows) >= 2 else 2
         sheet.update(f"A{next_empty_row}:B{next_empty_row}", [[year_str, 0]])
         current_page = 0
         row_index = next_empty_row
@@ -407,7 +410,6 @@ def get_next_page_for_year(file_year: int) -> dict:
         row_index = target["row_index"]
 
     next_page = current_page + 1
-
     sheet.update(f"B{row_index}", [[next_page]])
 
     return {
@@ -427,12 +429,20 @@ def get_processed_message_ids() -> set:
     return set(str(v).strip() for v in values[1:] if str(v).strip())
 
 
+def get_processed_file_hashes() -> set:
+    sheet = get_google_sheet()
+    ensure_sheet_structure(sheet)
+
+    values = sheet.col_values(8)
+    return set(str(v).strip() for v in values[1:] if str(v).strip())
+
+
 def get_next_log_row(sheet):
     message_ids = sheet.col_values(4)
     return len(message_ids) + 1 if len(message_ids) >= 1 else 2
 
 
-def append_processed_log(message_id: str, file_name: str, year: str, page: str):
+def append_processed_log(message_id: str, file_name: str, year: str, page: str, file_hash: str):
     sheet = get_google_sheet()
     ensure_sheet_structure(sheet)
 
@@ -440,8 +450,8 @@ def append_processed_log(message_id: str, file_name: str, year: str, page: str):
     row = get_next_log_row(sheet)
 
     sheet.update(
-        f"D{row}:H{row}",
-        [[message_id, file_name, year, page, created_at]]
+        f"D{row}:I{row}",
+        [[message_id, file_name, year, page, file_hash, created_at]]
     )
 
 
@@ -527,6 +537,7 @@ def download_attachments() -> list:
 
     downloaded_files = []
     processed_ids = get_processed_message_ids()
+    processed_hashes = get_processed_file_hashes()
 
     log("Connecting to Gmail...")
 
@@ -578,31 +589,53 @@ def download_attachments() -> list:
                     pass
 
             files_saved_from_this_email = 0
+            attachment_names_seen = set()
+            attachment_hashes_seen = set()
 
             for part in msg.walk():
                 if part.get_content_maintype() == "multipart":
                     continue
 
-                if part.get("Content-Disposition") is None:
-                    continue
-
                 filename = part.get_filename()
-
                 if not filename:
                     continue
 
-                original_filename = decode_mime_text(filename)
+                original_filename = decode_mime_text(filename).strip()
 
                 if not original_filename.lower().endswith((".xlsx", ".xls")):
                     continue
 
+                payload = part.get_payload(decode=True)
+                if not payload:
+                    continue
+
+                file_hash = get_file_hash(payload)
+                normalized_name = original_filename.lower().strip()
+
+                if normalized_name in attachment_names_seen:
+                    log(f"Skipped duplicate attachment name in same email: {original_filename}")
+                    continue
+
+                if file_hash in attachment_hashes_seen:
+                    log(f"Skipped duplicate attachment content in same email: {original_filename}")
+                    continue
+
+                if file_hash in processed_hashes:
+                    log(f"Skipped already processed file hash: {original_filename}")
+                    continue
+
+                attachment_names_seen.add(normalized_name)
+                attachment_hashes_seen.add(file_hash)
+
                 clean_name = clean_filename(f"{local_date_prefix}_{original_filename}")
                 filepath = os.path.join(DOWNLOAD_PATH, clean_name)
 
-                payload = part.get_payload(decode=True)
-
-                if not payload:
-                    continue
+                counter = 1
+                base_name, ext = os.path.splitext(clean_name)
+                while os.path.exists(filepath):
+                    clean_name = f"{base_name}_{counter}{ext}"
+                    filepath = os.path.join(DOWNLOAD_PATH, clean_name)
+                    counter += 1
 
                 with open(filepath, "wb") as f:
                     f.write(payload)
@@ -613,9 +646,11 @@ def download_attachments() -> list:
                     "path": filepath,
                     "file_name": clean_name,
                     "year": file_year,
-                    "message_id": real_message_id
+                    "message_id": real_message_id,
+                    "file_hash": file_hash
                 })
 
+                processed_hashes.add(file_hash)
                 files_saved_from_this_email += 1
                 log(f"Downloaded: {clean_name} | Delivery Year: {file_year}")
 
@@ -843,6 +878,7 @@ def process_all():
         file_year = int(item["year"])
         original_file_name = item["file_name"]
         message_id = item["message_id"]
+        file_hash = item["file_hash"]
 
         page_data = get_next_page_for_year(file_year)
 
@@ -859,7 +895,8 @@ def process_all():
                 message_id=message_id,
                 file_name=original_file_name,
                 year=str(file_year),
-                page=str(page_data["page"])
+                page=str(page_data["page"]),
+                file_hash=file_hash
             )
 
             edit_files.append({
