@@ -8,7 +8,7 @@ import traceback
 import pandas as pd
 
 from email.header import decode_header
-from flask import Flask, jsonify, render_template_string, send_file, send_from_directory, request
+from flask import Flask, jsonify, render_template_string, send_from_directory, request
 
 import gspread
 from google.oauth2.service_account import Credentials
@@ -167,7 +167,7 @@ input::placeholder{color:rgba(255,255,255,.65)}
 <body>
 <div class="card">
     <h1>QTTY Recap</h1>
-    <p>يقرأ الإيميلات الجديدة، يجهز ملفات الإكسيل، ويرقم الصفحات تلقائيًا من Google Sheet.</p>
+    <p>يقرأ الإيميلات الجديدة، يجهز ملفات الإكسيل، ويرقم الصفحات تلقائيًا حسب سنة الشحن من عمود Delivery Date.</p>
     <button class="run-btn" onclick="runProcess()">تشغيل الآن</button>
     <div id="result">جاهز للتشغيل ✅</div>
     <div id="files"></div>
@@ -216,8 +216,6 @@ async function savePageNumber(id, filename){
     const card = document.getElementById("file-card-" + id);
     card.querySelector(".file-name").innerText = data.filename;
     card.querySelector(".download-btn").href = data.download_url;
-    card.querySelector(".edit-btn").setAttribute("onclick", "showEditBox('" + id + "')");
-    card.dataset.filename = data.filename;
 
     hideEditBox(id);
     alert("تم تعديل رقم الصفحة داخل ملف الإكسيل ✅");
@@ -234,7 +232,7 @@ function renderFiles(files){
         const year = escapeHtml(file.year || "");
 
         box.innerHTML += `
-            <div class="file-card" id="file-card-${id}" data-filename="${safeName}">
+            <div class="file-card" id="file-card-${id}">
                 <div class="file-name">${safeName}</div>
                 <div class="actions">
                     <a class="download-btn" href="${file.download_url}">⬇️ تحميل</a>
@@ -312,7 +310,7 @@ def clean_filename(filename: str) -> str:
         except UnicodeDecodeError:
             filename = filename.decode("latin-1", errors="replace")
 
-    return re.sub(r'[\\/*?:"<>|]', "_", filename).strip()
+    return re.sub(r'[\\/*?:"<>|]', "_", str(filename)).strip()
 
 
 def safe_download_filename(filename: str) -> str:
@@ -341,39 +339,37 @@ def get_google_sheet():
 
 
 def ensure_sheet_structure(sheet):
-    values = sheet.get_all_values()
-
-    if not values:
-        sheet.update("A1:B1", [["year", "page"]])
-        sheet.update("D1:H1", [["message_id", "file_name", "year", "page", "created_at"]])
-        return
-
-    if len(values[0]) < 2 or values[0][0].strip().lower() != "year":
-        sheet.update("A1:B1", [["year", "page"]])
-
-    current_headers = sheet.row_values(1)
-
-    if len(current_headers) < 8 or current_headers[3].strip().lower() != "message_id":
-        sheet.update("D1:H1", [["message_id", "file_name", "year", "page", "created_at"]])
+    sheet.update("A1:B1", [["year", "page"]])
+    sheet.update("D1:H1", [["message_id", "file_name", "year", "page", "created_at"]])
 
 
 def get_year_rows(sheet):
     ensure_sheet_structure(sheet)
-    rows = sheet.get_all_records(expected_headers=["year", "page"])
+
+    years = sheet.col_values(1)
+    pages = sheet.col_values(2)
+
     clean_rows = []
+    max_len = max(len(years), len(pages))
 
-    for index, row in enumerate(rows, start=2):
-        year = str(row.get("year", "")).strip()
-        page = str(row.get("page", "")).strip()
+    for i in range(2, max_len + 1):
+        year = ""
+        page = ""
 
-        if year and year.isdigit():
+        if i - 1 < len(years):
+            year = str(years[i - 1]).strip()
+
+        if i - 1 < len(pages):
+            page = str(pages[i - 1]).strip()
+
+        if year.isdigit():
             try:
                 page_num = int(float(page)) if page else 0
             except Exception:
                 page_num = 0
 
             clean_rows.append({
-                "row_index": index,
+                "row_index": i,
                 "year": year,
                 "page": page_num
             })
@@ -389,15 +385,20 @@ def get_next_page_for_year(file_year: int) -> dict:
     suffix = year_str[-2:]
 
     rows = get_year_rows(sheet)
-    target = None
 
+    target = None
     for row in rows:
         if row["year"] == year_str:
             target = row
             break
 
     if target is None:
-        next_empty_row = len(rows) + 2
+        next_empty_row = 2
+
+        used_rows = sheet.col_values(1)
+        if len(used_rows) >= 2:
+            next_empty_row = len(used_rows) + 1
+
         sheet.update(f"A{next_empty_row}:B{next_empty_row}", [[year_str, 0]])
         current_page = 0
         row_index = next_empty_row
@@ -406,6 +407,7 @@ def get_next_page_for_year(file_year: int) -> dict:
         row_index = target["row_index"]
 
     next_page = current_page + 1
+
     sheet.update(f"B{row_index}", [[next_page]])
 
     return {
@@ -422,7 +424,12 @@ def get_processed_message_ids() -> set:
     ensure_sheet_structure(sheet)
 
     values = sheet.col_values(4)
-    return set(v.strip() for v in values[1:] if str(v).strip())
+    return set(str(v).strip() for v in values[1:] if str(v).strip())
+
+
+def get_next_log_row(sheet):
+    message_ids = sheet.col_values(4)
+    return len(message_ids) + 1 if len(message_ids) >= 1 else 2
 
 
 def append_processed_log(message_id: str, file_name: str, year: str, page: str):
@@ -430,12 +437,44 @@ def append_processed_log(message_id: str, file_name: str, year: str, page: str):
     ensure_sheet_structure(sheet)
 
     created_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    row = get_next_log_row(sheet)
 
-    sheet.append_row(
-        [message_id, file_name, year, page, created_at],
-        table_range="D1:H1",
-        value_input_option="USER_ENTERED"
+    sheet.update(
+        f"D{row}:H{row}",
+        [[message_id, file_name, year, page, created_at]]
     )
+
+
+def normalize_header(value):
+    return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+
+def extract_year_from_delivery_date_value(value):
+    if value is None:
+        return None
+
+    if isinstance(value, (datetime.datetime, datetime.date)):
+        return int(value.year)
+
+    text = str(value).strip()
+
+    if not text:
+        return None
+
+    parsed = pd.to_datetime(text, errors="coerce", dayfirst=True)
+
+    if pd.notna(parsed):
+        return int(parsed.year)
+
+    year_match = re.search(r"(20\d{2})", text)
+    if year_match:
+        return int(year_match.group(1))
+
+    short_year_match = re.search(r"(?:/|-|\.)(\d{2})$", text)
+    if short_year_match:
+        return int("20" + short_year_match.group(1))
+
+    return None
 
 
 def extract_file_year_from_excel(filepath: str, fallback_year: int) -> int:
@@ -448,32 +487,31 @@ def extract_file_year_from_excel(filepath: str, fallback_year: int) -> int:
         target_col_idx = None
 
         for cell in ws_temp[1]:
-            if cell.value and "delivery date" in str(cell.value).lower():
+            header = normalize_header(cell.value)
+
+            if header in ["delivery date", "deliverydate"]:
+                target_col_idx = cell.column
+                break
+
+            if "delivery" in header and "date" in header:
                 target_col_idx = cell.column
                 break
 
         if target_col_idx:
-            cell_val = ws_temp.cell(row=2, column=target_col_idx).value
+            for row_num in range(2, min(ws_temp.max_row, 20) + 1):
+                cell_val = ws_temp.cell(row=row_num, column=target_col_idx).value
+                extracted_year = extract_year_from_delivery_date_value(cell_val)
 
-            if cell_val:
-                extracted_suffix = None
-
-                if isinstance(cell_val, (datetime.datetime, datetime.date)):
-                    return int(cell_val.year)
-                else:
-                    digits = re.findall(r"\d", str(cell_val))
-                    if len(digits) >= 2:
-                        extracted_suffix = "".join(digits[-2:])
-
-                if extracted_suffix:
-                    file_year = int("20" + extracted_suffix)
+                if extracted_year:
+                    file_year = extracted_year
+                    break
 
         wb_temp.close()
 
     except Exception as e:
         log(f"Year extraction warning: {e}")
 
-    return file_year
+    return int(file_year)
 
 
 def get_message_real_id(msg, fallback_id: str) -> str:
@@ -579,7 +617,7 @@ def download_attachments() -> list:
                 })
 
                 files_saved_from_this_email += 1
-                log(f"Downloaded: {clean_name}")
+                log(f"Downloaded: {clean_name} | Delivery Year: {file_year}")
 
             if files_saved_from_this_email > 0:
                 mail.store(num_bytes, '+FLAGS', '\\Seen')
@@ -793,18 +831,6 @@ def transform_excel_file(input_file: str, page_title: str, output_file_name: str
         log(f"Transform error: {e}")
         log(traceback.format_exc())
         return None
-
-
-def parse_page_year_from_filename(filename: str):
-    match = re.search(r"PAGE\s+(\d+)-(\d{2})", filename, re.IGNORECASE)
-    if not match:
-        return "", ""
-
-    page = match.group(1)
-    suffix = match.group(2)
-    year = "20" + suffix
-
-    return page, year
 
 
 def process_all():
