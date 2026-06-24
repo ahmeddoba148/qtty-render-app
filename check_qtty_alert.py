@@ -28,30 +28,38 @@ def cairo_now():
 def decode_mime_text(value):
     if not value:
         return ""
+
     parts = decode_header(value)
     result = []
+
     for part, enc in parts:
         if isinstance(part, bytes):
-            result.append(part.decode(enc or "utf-8", errors="replace"))
+            try:
+                result.append(part.decode(enc or "utf-8", errors="replace"))
+            except Exception:
+                result.append(part.decode("latin-1", errors="replace"))
         else:
             result.append(str(part))
+
     return "".join(result)
 
 
 def get_google_book():
     creds_dict = json.loads(GOOGLE_CREDS_JSON)
+
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
+
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
+
     return client.open(GOOGLE_SHEET_NAME)
 
 
 def get_main_sheet(book):
-    sheet = book.sheet1
-    return sheet
+    return book.sheet1
 
 
 def get_or_create_notifications_sheet(book):
@@ -60,11 +68,12 @@ def get_or_create_notifications_sheet(book):
     except gspread.WorksheetNotFound:
         ws = book.add_worksheet(title="notifications", rows=1000, cols=4)
         ws.update("A1:D1", [["message_id", "subject", "notified_at", "date_key"]])
+
     return ws
 
 
 def get_processed_message_ids(sheet):
-    values = sheet.col_values(4)  # D = message_id
+    values = sheet.col_values(4)  # D = message_id في الشيت الأساسي
     return set(str(v).strip() for v in values[1:] if str(v).strip())
 
 
@@ -80,12 +89,14 @@ def already_ran_today(ws, date_key):
 
 def send_telegram(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": text,
         "parse_mode": "HTML",
         "disable_web_page_preview": True,
     }
+
     r = requests.post(url, json=payload, timeout=30)
     r.raise_for_status()
 
@@ -95,12 +106,29 @@ def get_message_real_id(msg, fallback_id):
     return real_id.strip() if real_id else str(fallback_id)
 
 
+def should_run_now(now):
+    """
+    التشغيل اليدوي من GitHub Run Workflow يشتغل في أي وقت.
+    التشغيل التلقائي Schedule يشتغل فقط الساعة 2 ظهرًا بتوقيت القاهرة.
+    """
+    event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+
+    if event_name == "workflow_dispatch":
+        print("Manual run detected. Running now.")
+        return True
+
+    if now.hour == 14:
+        print("Scheduled run at Cairo 14:00 detected. Running now.")
+        return True
+
+    print(f"Skipped. Cairo time is {now.strftime('%H:%M')}")
+    return False
+
+
 def main():
     now = cairo_now()
 
-    # ضمان إنه يشتغل فعليًا الساعة 2 ظهرًا بتوقيت القاهرة فقط
-    if now.hour != 14:
-        print(f"Skipped. Cairo time is {now.strftime('%H:%M')}")
+    if not should_run_now(now):
         return
 
     date_key = now.strftime("%Y-%m-%d")
@@ -109,9 +137,13 @@ def main():
     main_sheet = get_main_sheet(book)
     notify_sheet = get_or_create_notifications_sheet(book)
 
-    if already_ran_today(notify_sheet, date_key):
-        print("Already checked today.")
-        return
+    # منع تكرار الفحص اليومي في التشغيل التلقائي فقط
+    # أما التشغيل اليدوي فنسمح به للتجربة في أي وقت
+    event_name = os.environ.get("GITHUB_EVENT_NAME", "")
+    if event_name != "workflow_dispatch":
+        if already_ran_today(notify_sheet, date_key):
+            print("Already checked today.")
+            return
 
     processed_ids = get_processed_message_ids(main_sheet)
     notified_ids = get_notified_message_ids(notify_sheet)
@@ -121,10 +153,20 @@ def main():
     mail.select("INBOX")
 
     since_date = (now - datetime.timedelta(days=2)).strftime("%d-%b-%Y")
-    status, messages = mail.search(None, f'(SINCE "{since_date}" SUBJECT "Qtty Recap")')
+    status, messages = mail.search(
+        None,
+        f'(SINCE "{since_date}" SUBJECT "Qtty Recap")'
+    )
 
     if status != "OK" or not messages or not messages[0]:
-        notify_sheet.append_row(["NO_NEW_MAIL", "No Qtty Recap", now.strftime("%Y-%m-%d %H:%M:%S"), date_key])
+        if event_name != "workflow_dispatch":
+            notify_sheet.append_row([
+                "NO_NEW_MAIL",
+                "No Qtty Recap",
+                now.strftime("%Y-%m-%d %H:%M:%S"),
+                date_key
+            ])
+
         mail.logout()
         print("No Qtty Recap emails.")
         return
@@ -132,7 +174,9 @@ def main():
     new_items = []
 
     for num in messages[0].split():
-        status, msg_data = mail.fetch(num, "(BODY.PEEK[HEADER])")  # لا يعمل Seen
+        # PEEK = قراءة الهيدر فقط بدون عمل Seen
+        status, msg_data = mail.fetch(num, "(BODY.PEEK[HEADER])")
+
         if status != "OK" or not msg_data or not msg_data[0]:
             continue
 
@@ -149,7 +193,14 @@ def main():
         new_items.append((message_id, subject))
 
     if not new_items:
-        notify_sheet.append_row(["NO_NEW_UNPROCESSED", "No new unprocessed Qtty Recap", now.strftime("%Y-%m-%d %H:%M:%S"), date_key])
+        if event_name != "workflow_dispatch":
+            notify_sheet.append_row([
+                "NO_NEW_UNPROCESSED",
+                "No new unprocessed Qtty Recap",
+                now.strftime("%Y-%m-%d %H:%M:%S"),
+                date_key
+            ])
+
         mail.logout()
         print("No new unprocessed emails.")
         return
@@ -161,13 +212,23 @@ def main():
     ]
 
     if RENDER_SITE_URL:
-        lines += ["", f"افتح الموقع للتحميل:\n{RENDER_SITE_URL}"]
+        lines += [
+            "",
+            "افتح الموقع للتحميل:",
+            RENDER_SITE_URL
+        ]
 
     send_telegram("\n".join(lines))
 
     notified_at = now.strftime("%Y-%m-%d %H:%M:%S")
+
     for message_id, subject in new_items:
-        notify_sheet.append_row([message_id, subject, notified_at, date_key])
+        notify_sheet.append_row([
+            message_id,
+            subject,
+            notified_at,
+            date_key
+        ])
 
     mail.logout()
     print(f"Alert sent for {len(new_items)} email(s).")
