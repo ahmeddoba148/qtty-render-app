@@ -713,6 +713,8 @@ def transform_excel_file(input_file: str, page_title: str, output_file_name: str
         cols_to_delete_indices = []
 
         for idx, header in enumerate(headers):
+            if normalize_header(header) == "customer code":
+                continue
             if header and any(kw.lower() in str(header).lower() for kw in keywords_to_delete):
                 cols_to_delete_indices.append(idx + 1)
 
