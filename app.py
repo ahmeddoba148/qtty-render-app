@@ -834,6 +834,7 @@ def transform_excel_file(input_file: str, page_title: str, output_file_name: str
         current_headers = [cell.value for cell in ws[2]]
 
         column_widths = {
+            "customer code": 14,
             "po #": 20,
             "style #": 18,
             "size": 15,
