@@ -81,7 +81,7 @@ h1{margin:0;font:bold 23px Arial,sans-serif;letter-spacing:-.5px;direction:ltr}
 #result[data-state=error] .result-heading::before{content:"!";background:#fda4a41a;color:#fda4a4}
 #result[data-state=loading] .result-heading::before{content:"";width:18px;height:18px;flex-basis:18px;margin:3px 2px 0;border:2px solid #a3e5d230;border-top-color:var(--accent);background:none;animation:status-spin .8s linear infinite}
 @keyframes status-spin{to{transform:rotate(360deg)}}
-@media(prefers-reduced-motion:reduce){#result[data-state=loading] .result-heading::before{animation:none}}
+@media(prefers-reduced-motion:reduce){ #result[data-state=loading] .result-heading::before{animation:none}}
 #files:empty{display:none}
 .file-card{margin-top:18px;padding:17px;border:1px solid var(--line);border-radius:15px;background:#ffffff04;min-width:0}
 .file-name{direction:ltr;text-align:left;font-family:Arial,Tahoma,sans-serif;font-size:13px;color:var(--text);overflow-wrap:anywhere;margin-bottom:13px}
