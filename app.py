@@ -71,7 +71,17 @@ h1{margin:0;font:bold 23px Arial,sans-serif;letter-spacing:-.5px;direction:ltr}
 .run-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:52px;padding:13px;border-radius:13px;background:var(--accent);color:#12392e;font-size:16px;font-weight:bold}
 .run-btn:hover{background:#b7eddd}
 .run-btn svg{width:17px;height:17px}
-#result{margin-top:17px;font-size:12px;color:var(--muted);text-align:center;white-space:pre-line;overflow-wrap:anywhere}
+#result{margin-top:18px;padding:14px 16px;background:#ffffff04;border:1px solid var(--line);border-radius:12px;text-align:right;overflow-wrap:anywhere}
+.result-heading{display:flex;align-items:flex-start;gap:10px;font-size:13px;font-weight:bold;line-height:1.8;color:var(--text)}
+.result-heading::before{content:"•";display:flex;align-items:center;justify-content:center;width:22px;height:22px;flex:0 0 22px;margin-top:1px;border-radius:50%;background:#ffffff0b;color:var(--muted);font:16px Arial,sans-serif}
+.result-description{margin-top:5px;padding-inline-start:32px;color:var(--muted);font-size:12px;line-height:1.9;white-space:pre-line}
+#result[data-state=success]{background:#a3e5d209;border-color:#a3e5d225}
+#result[data-state=success] .result-heading::before{content:"✓";background:#a3e5d21a;color:var(--accent)}
+#result[data-state=error]{background:#fda4a409;border-color:#fda4a430}
+#result[data-state=error] .result-heading::before{content:"!";background:#fda4a41a;color:#fda4a4}
+#result[data-state=loading] .result-heading::before{content:"";width:18px;height:18px;flex-basis:18px;margin:3px 2px 0;border:2px solid #a3e5d230;border-top-color:var(--accent);background:none;animation:status-spin .8s linear infinite}
+@keyframes status-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#result[data-state=loading] .result-heading::before{animation:none}}
 #files:empty{display:none}
 .file-card{margin-top:18px;padding:17px;border:1px solid var(--line);border-radius:15px;background:#ffffff04;min-width:0}
 .file-name{direction:ltr;text-align:left;font-family:Arial,Tahoma,sans-serif;font-size:13px;color:var(--text);overflow-wrap:anywhere;margin-bottom:13px}
@@ -123,7 +133,7 @@ input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px #a3e5d2
         <div class="small-note">الصفحة التالية لنفس السنة = الرقم المكتوب + 1.</div>
     </div>
     <button class="run-btn" onclick="runProcess()"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5a1 1 0 0 1 1.5-.86l10 6a1 1 0 0 1 0 1.72l-10 6A1 1 0 0 1 8 17.5Z"/></svg>تشغيل الآن</button>
-    <div id="result" role="status" aria-live="polite">جاهز للتشغيل ✅</div>
+    <div id="result" data-state="ready" role="status" aria-live="polite" aria-atomic="true"><div class="result-heading">جاهز للتشغيل</div></div>
     <div id="files"></div>
 </main>
 
@@ -249,17 +259,35 @@ function renderFiles(files){
     });
 }
 
-async function runProcess(){
+function showResult(message, state){
     const result = document.getElementById("result");
+    const lines = String(message || "تعذر عرض نتيجة التشغيل")
+        .replaceAll(String.fromCharCode(92) + "n", String.fromCharCode(10))
+        .replaceAll("✅", "").replaceAll("❌", "")
+        .split(String.fromCharCode(10)).map(line => line.trim()).filter(Boolean);
+    const heading = document.createElement("div");
+    heading.className = "result-heading";
+    heading.textContent = lines.shift() || "نتيجة التشغيل";
+    result.dataset.state = state;
+    result.replaceChildren(heading);
+    if(lines.length){
+        const description = document.createElement("div");
+        description.className = "result-description";
+        description.textContent = lines.join(String.fromCharCode(10));
+        result.appendChild(description);
+    }
+}
+
+async function runProcess(){
     const filesBox = document.getElementById("files");
-    result.innerText = "جاري التشغيل... انتظر";
+    showResult("جاري التشغيل... انتظر", "loading");
     filesBox.innerHTML = "";
 
     try{
         const res = await fetch("/run");
         const data = await res.json();
 
-        result.innerHTML = data.message.replaceAll("\\n", "<br>");
+        showResult(data.message, data.success ? "success" : "error");
 
         if(data.success && data.files && data.files.length){
             renderFiles(data.files);
@@ -268,7 +296,7 @@ async function runProcess(){
         }
 
     }catch(e){
-        result.innerText = "حدث خطأ أثناء التشغيل: " + e;
+        showResult("حدث خطأ أثناء التشغيل" + String.fromCharCode(10) + e, "error");
     }
 }
 </script>
