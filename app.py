@@ -53,92 +53,56 @@ HOME_HTML = """
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QTTY Recap</title>
 <style>
-:root{--ink:#172b3a;--muted:#647685;--teal:#0d7968;--line:#e2e9ee;--surface:#fff;--radius:22px}
+:root{color-scheme:dark;--text:#eaf4f3;--muted:#9aafad;--accent:#a3e5d2;--line:rgba(255,255,255,.12)}
 *{box-sizing:border-box}
-html{color-scheme:light}
-body{margin:0;min-height:100vh;min-height:100svh;background:#f5f8fa;color:var(--ink);font-family:Tahoma,Arial,sans-serif;line-height:1.7}
-button,input,a{-webkit-tap-highlight-color:transparent}
+body{margin:0;min-height:100vh;min-height:100svh;padding:32px 18px;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 15% 15%,#164340 0,transparent 48%),radial-gradient(ellipse at 90% 85%,#172d47 0,transparent 45%),#0a1419;color:var(--text);font-family:Tahoma,Arial,sans-serif;line-height:1.7}
 button,input{font:inherit}
+button,a,input{-webkit-tap-highlight-color:transparent;transition:background .18s,border-color .18s}
 button,a{touch-action:manipulation}
-button{border:0;cursor:pointer}
-button:disabled{opacity:.6;cursor:wait}
-button,a,input{transition:background .18s,border-color .18s,box-shadow .18s,transform .18s}
-button:focus-visible,a:focus-visible{outline:3px solid #37b6a3;outline-offset:4px}
-input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px #0d796815}
-svg{display:block;flex-shrink:0}
-.card{width:min(1120px,100%);margin:auto;padding:0 32px}
-.topbar{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:25px 0;border-bottom:1px solid var(--line)}
-.brand{display:flex;align-items:center;gap:12px;min-width:0}
-.logo{width:48px;height:48px;filter:drop-shadow(0 4px 7px #0d796818)}
-.brand-name{margin:0;font:bold 21px Arial,sans-serif;letter-spacing:-.5px;direction:ltr;text-align:right}
-.brand-caption{margin:1px 0 0;font-size:11px;color:var(--muted)}
-.top-note{display:flex;align-items:center;gap:8px;color:var(--teal);font-size:12px;background:#e6f2ee;padding:7px 13px;border-radius:30px}
-.top-note span{height:6px;width:6px;border-radius:50%;background:var(--teal)}
-.hero{padding:42px 0 32px;max-width:780px}
-.eyebrow{display:flex;align-items:center;gap:9px;margin:0 0 12px;color:var(--teal);font-size:12px;font-weight:bold}
-.eyebrow::before{content:"";width:24px;height:2px;background:var(--teal)}
-h1{font-size:clamp(25px,3.3vw,38px);line-height:1.55;letter-spacing:-1px;margin:0 0 12px}
-.hero-description{margin:0;color:var(--muted);max-width:660px;font-size:14px;line-height:1.9}
-.dashboard{display:grid;grid-template-columns:1.1fr 1fr;gap:22px;align-items:start}
-.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:26px;min-width:0;box-shadow:0 6px 24px #172b3a03}
-.panel-heading{display:flex;align-items:center;gap:12px;margin-bottom:20px}
-.panel-icon{display:flex;align-items:center;justify-content:center;width:43px;height:43px;border-radius:13px;background:#edf5f2;color:var(--teal);flex-shrink:0}
-h2{margin:0;font-size:17px;line-height:1.6}
-.panel-caption{margin:2px 0 0;color:var(--muted);font-size:12px}
-.counter-value{padding:22px 16px;margin:0 0 16px;background:#f4f8f7;border:1px solid #e3eeea;border-radius:16px;text-align:center;color:#176757;font-size:20px;font-weight:bold;line-height:1.8;overflow-wrap:anywhere;unicode-bidi:plaintext}
-.counter-edit-btn{width:100%;background:white;color:var(--teal);border:1px solid #c6ddd5}
-.actions{display:flex;gap:10px;flex-wrap:wrap}
-.download-btn,.edit-btn,.save-btn,.cancel-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 17px;border-radius:11px;text-decoration:none;font-size:13px;font-weight:bold;min-height:46px;max-width:100%}
-.download-btn,.save-btn{background:var(--teal);color:white}
-.edit-btn{background:#edf5f2;color:var(--teal)}
-.cancel-btn{background:#edf1f5;color:#526471}
-.counter-edit-btn{background:white;border:1px solid #c6ddd5}
-.download-btn:hover,.save-btn:hover{background:#096353}
-.edit-btn:hover{background:#e0eee8}
-.cancel-btn:hover{background:#dfe6ec}
-.edit-box{display:none;margin-top:18px;border-top:1px solid var(--line);padding-top:18px}
-.inputs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+button{cursor:pointer;border:0}
+button:disabled{opacity:.55;cursor:wait}
+button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.card{width:100%;max-width:540px;min-width:0;padding:28px;background:rgba(255,255,255,.055);border:1px solid var(--line);border-radius:25px;box-shadow:0 24px 70px #0004,inset 0 1px 0 #ffffff08;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}
+.brand{display:flex;align-items:center;justify-content:center;gap:11px;margin-bottom:28px}
+.logo{width:40px;height:40px;flex-shrink:0}
+h1{margin:0;font:bold 23px Arial,sans-serif;letter-spacing:-.5px;direction:ltr}
+.counter-value{margin:0;text-align:center;font-size:18px;font-weight:bold;line-height:1.9;overflow-wrap:anywhere;unicode-bidi:plaintext}
+.counter-edit-btn{display:flex;align-items:center;justify-content:center;margin:9px auto 23px;background:transparent;color:var(--muted);font-size:12px;min-height:44px;padding:8px 14px;border-radius:10px}
+.counter-edit-btn:hover{color:var(--accent);background:#ffffff08}
+.run-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;min-height:52px;padding:13px;border-radius:13px;background:var(--accent);color:#12392e;font-size:16px;font-weight:bold}
+.run-btn:hover{background:#b7eddd}
+.run-btn svg{width:17px;height:17px}
+#result{margin-top:17px;font-size:12px;color:var(--muted);text-align:center;white-space:pre-line;overflow-wrap:anywhere}
+#files:empty{display:none}
+.file-card{margin-top:18px;padding:17px;border:1px solid var(--line);border-radius:15px;background:#ffffff04;min-width:0}
+.file-name{direction:ltr;text-align:left;font-family:Arial,Tahoma,sans-serif;font-size:13px;color:var(--text);overflow-wrap:anywhere;margin-bottom:13px}
+.actions{display:flex;gap:9px;flex-wrap:wrap}
+.download-btn,.edit-btn,.save-btn,.cancel-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 14px;min-height:44px;border-radius:10px;font-size:12px;font-weight:bold;text-decoration:none}
+.actions>*{flex:1;min-width:0}
+.download-btn,.save-btn{background:var(--accent);color:#12392e}
+.edit-btn,.cancel-btn{background:#ffffff0c;color:var(--text);border:1px solid var(--line)}
+.edit-btn:hover,.cancel-btn:hover{background:#ffffff16}
+.edit-box{display:none;margin:0 0 22px;padding:17px;border:1px solid var(--line);border-radius:15px;background:#07111633}
+.file-card .edit-box{margin:15px 0 0}
+.inputs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 label{display:block;min-width:0}
-label>span{display:block;margin-bottom:6px;font-size:12px;color:#425b68;font-weight:bold}
-input{width:100%;min-width:0;max-width:100%;padding:11px 12px;border:1px solid #d6e1e7;border-radius:10px;background:#fff;color:var(--ink);font-size:16px;line-height:1.5;text-align:right;min-height:46px}
+label>span{display:block;margin-bottom:6px;font-size:11px;color:var(--muted)}
+input{width:100%;min-width:0;min-height:45px;padding:10px 12px;border:1px solid #ffffff20;border-radius:9px;background:#ffffff05;color:var(--text);font-size:16px}
 input[type=number]{direction:ltr;text-align:center}
 input[type=password]{direction:ltr}
-input::placeholder{color:#8696a1;font-size:13px}
-.password-field{margin-bottom:16px}
-.small-note{font-size:11px;line-height:1.9;color:var(--muted);margin-top:12px}
-.run-panel{background:#153b3a;border-color:#153b3a;color:white;position:relative;overflow:hidden}
-.run-panel::after{content:"";position:absolute;left:-54px;top:-100px;width:230px;height:230px;border-radius:50%;border:35px solid #ffffff04;pointer-events:none}
-.run-panel .panel-icon{background:#ffffff12;color:#96ddca}
-.run-panel .panel-caption{color:#bfd0cf}
-.run-description{margin:0;color:#d1dedd;font-size:13px;line-height:1.95}
-.workflow{display:flex;align-items:center;gap:9px;margin:23px 0;color:#b9d1cc;font-size:11px;flex-wrap:wrap}
-.workflow span{display:flex;align-items:center;gap:6px}
-.workflow b{font-weight:normal;opacity:.55}
-.run-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:54px;padding:13px 18px;border-radius:13px;background:#a6e6cb;color:#123c32;font-size:16px;font-weight:bold}
-.run-btn:hover{background:#bff1dd;transform:translateY(-1px)}
-.run-note{margin:12px 0 0;color:#b9ccca;font-size:11px;text-align:center}
-.results-panel{margin-top:22px;margin-bottom:28px}
-.results-panel .panel-heading{margin-bottom:16px}
-#result{background:#f6f8fb;border:1px solid #e9eef2;border-radius:13px;padding:17px;color:#526775;font-size:13px;min-height:58px;white-space:pre-line;overflow-wrap:anywhere}
-#files{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
-#files:empty{display:none}
-.file-card{min-width:0;margin-top:16px;padding:19px;border:1px solid var(--line);border-radius:16px;background:#fff;text-align:right}
-.file-name{font-family:Arial,Tahoma,sans-serif;direction:ltr;text-align:left;font-size:14px;font-weight:bold;overflow-wrap:anywhere;margin-bottom:18px;color:#284352}
-.file-card .actions>*{flex:1}
-.file-card .small-note{font-size:11px}
-footer{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid var(--line);padding:18px 0 26px;color:#80919c;font-size:11px}
-.footer-brand{font:bold 12px Arial,sans-serif;letter-spacing:.5px}
-@media(min-width:1600px){.card{width:min(1240px,100%)}.hero{padding-top:55px}}
-@media(max-width:720px){.card{padding:0 20px}.topbar{padding:20px 0}.hero{padding:30px 0 25px}.dashboard{grid-template-columns:1fr;gap:16px}.panel{padding:23px}.hero-description{font-size:13px}.results-panel{margin-top:16px}#files{grid-template-columns:1fr}.top-note{font-size:11px;padding:6px 10px}}
-@media(max-width:400px){.card{padding:0 14px}.top-note{display:none}.panel{padding:18px;border-radius:18px}.hero{padding-top:24px}h1{font-size:25px}.counter-value{font-size:18px;padding:18px 12px}.inputs{grid-template-columns:1fr}.actions>*{flex:1}.file-card{padding:15px}footer{flex-direction:column;align-items:flex-start;gap:5px}.brand-name{font-size:20px}}
-@media(prefers-reduced-motion:reduce){*{transition:none!important}.run-btn:hover{transform:none}}
+input::placeholder{color:#829894;font-size:12px}
+input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px #a3e5d212}
+.password-field{margin-bottom:14px}
+.small-note{font-size:11px;color:var(--muted);line-height:1.9;margin-top:11px}
+@media(max-width:400px){body{padding:20px 12px}.card{padding:23px 18px;border-radius:21px}.counter-value{font-size:16px}.file-card{padding:14px}.inputs{grid-template-columns:1fr}.brand{margin-bottom:23px}}
+@media(max-height:650px){body{align-items:flex-start}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
-<div class="card">
-    <header class="topbar">
-        <div class="brand">
-            <svg class="logo" viewBox="0 0 48 48" role="img" aria-label="شعار QTTY Recap">
+<main class="card">
+    <header class="brand">
+        <svg class="logo" viewBox="0 0 48 48" role="img" aria-label="شعار QTTY Recap">
                 <rect width="48" height="48" rx="15" fill="#0d7968"/>
                 <path d="M16 10h12l7 7v19a2 2 0 0 1-2 2H16a2 2 0 0 1-2-2V12a2 2 0 0 1 2-2Z" fill="#fff"/>
                 <path d="M28 10v7h7" fill="#bde4d7"/>
@@ -146,59 +110,26 @@ footer{display:flex;align-items:center;justify-content:space-between;gap:16px;bo
                 <circle cx="35" cy="35" r="8" fill="#a6e6cb" stroke="#0d7968" stroke-width="2"/>
                 <path d="m32 35 2 2 4-4" fill="none" stroke="#0d7968" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <div><p class="brand-name">QTTY Recap</p><p class="brand-caption">إدارة ملفات الشحن وترقيم الصفحات</p></div>
-        </div>
-        <div class="top-note"><span aria-hidden="true"></span>تفاصيل أقل، تنظيم أكثر</div>
+        <h1>QTTY Recap</h1>
     </header>
-    <main>
-        <section class="hero">
-            <p class="eyebrow">من البريد إلى ملف جاهز</p>
-            <h1>ملفات مرتبة، وصفحات محسوبة.</h1>
-            <p class="hero-description">جهّز ملفات الإكسيل من الإيميلات الجديدة، وتابع ترقيم الصفحات حسب سنة الشحن من عمود <bdi>Delivery Date</bdi>، في مكان واحد.</p>
-        </section>
-        <div class="dashboard">
-            <section class="panel counter-panel" aria-labelledby="counter-heading">
-                <div class="panel-heading">
-                    <span class="panel-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M9 3 7 21M17 3l-2 18M3 9h18M2 15h18"/></svg></span>
-                    <div><h2 id="counter-heading">عداد الصفحات</h2><p class="panel-caption">تابع آخر رقم واضبط بداية الصفحة التالية</p></div>
-                </div>
-                <p class="counter-value" id="last-page-message" aria-live="polite">{{ last_page_message }}</p>
-                <button class="edit-btn counter-edit-btn" onclick="document.getElementById('counter-edit-box').style.display='block'"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15l-1 5Z"/></svg>تعديل رقم الصفحة</button>
-                <div class="edit-box" id="counter-edit-box">
-                    <div class="inputs">
-                        <label><span>رقم آخر صفحة</span><input id="counter-page" type="number" min="0" step="1" placeholder="مثال: 100" value="{{ last_page_number }}"></label>
-                        <label><span>سنة الشحن</span><input id="counter-year" type="number" min="2000" max="2099" step="1" placeholder="السنة" value="{{ last_page_year }}"></label>
-                    </div>
-                    <label class="password-field"><span>كلمة مرور تعديل العداد</span><input id="counter-password" type="password" autocomplete="current-password" placeholder="أدخل كلمة المرور للحفظ"></label>
-                    <div class="actions">
-                        <button class="save-btn" id="counter-save-btn" onclick="savePageCounter()">حفظ الرقم</button>
-                        <button class="cancel-btn" onclick="document.getElementById('counter-edit-box').style.display='none'">إلغاء</button>
-                    </div>
-                    <div class="small-note">الصفحة التالية لنفس السنة ستكون الرقم المكتوب + 1.</div>
-                </div>
-            </section>
-            <section class="panel run-panel" aria-labelledby="run-heading">
-                <div class="panel-heading">
-                    <span class="panel-icon" aria-hidden="true"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></svg></span>
-                    <div><h2 id="run-heading">جهّز ملفاتك بضغطة</h2><p class="panel-caption">معالجة الإيميلات الجديدة تلقائيًا</p></div>
-                </div>
-                <p class="run-description">ابدأ قراءة البريد وتجهيز ملفات الإكسيل. الملفات الجاهزة هتظهر هنا للتحميل أو تعديل رقم الصفحة.</p>
-                <div class="workflow" aria-label="مراحل تجهيز الملفات"><span>01 · قراءة البريد</span><b aria-hidden="true">←</b><span>02 · تجهيز الملفات</span><b aria-hidden="true">←</b><span>03 · التحميل</span></div>
-                <button class="run-btn" onclick="runProcess()"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5a1 1 0 0 1 1.5-.86l10 6a1 1 0 0 1 0 1.72l-10 6A1 1 0 0 1 8 17.5Z"/></svg>تشغيل الآن</button>
-                <p class="run-note">الترقيم تلقائي حسب سنة الشحن لكل ملف</p>
-            </section>
+    <p class="counter-value" id="last-page-message" aria-live="polite">{{ last_page_message }}</p>
+    <button class="counter-edit-btn" onclick="document.getElementById('counter-edit-box').style.display='block'">تعديل رقم الصفحة</button>
+    <div class="edit-box" id="counter-edit-box">
+        <div class="inputs">
+            <label><span>رقم آخر صفحة</span><input id="counter-page" type="number" min="0" step="1" placeholder="رقم الصفحة" value="{{ last_page_number }}"></label>
+            <label><span>السنة</span><input id="counter-year" type="number" min="2000" max="2099" step="1" placeholder="السنة" value="{{ last_page_year }}"></label>
         </div>
-        <section class="panel results-panel" aria-labelledby="files-heading">
-            <div class="panel-heading">
-                <span class="panel-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg></span>
-                <div><h2 id="files-heading">الملفات الجاهزة</h2><p class="panel-caption">نتيجة التشغيل وروابط تحميل ملفات الإكسيل</p></div>
-            </div>
-            <div id="result" role="status" aria-live="polite">جاهز للتشغيل ✅</div>
-            <div id="files"></div>
-        </section>
-    </main>
-    <footer><span class="footer-brand" dir="ltr">QTTY RECAP</span><span>من الإيميل إلى الإكسيل، بخطوات أبسط.</span></footer>
-</div>
+        <label class="password-field"><span>كلمة مرور الحفظ</span><input id="counter-password" type="password" autocomplete="current-password" placeholder="كلمة المرور"></label>
+        <div class="actions">
+            <button class="save-btn" id="counter-save-btn" onclick="savePageCounter()">حفظ</button>
+            <button class="cancel-btn" onclick="document.getElementById('counter-edit-box').style.display='none'">إلغاء</button>
+        </div>
+        <div class="small-note">الصفحة التالية لنفس السنة = الرقم المكتوب + 1.</div>
+    </div>
+    <button class="run-btn" onclick="runProcess()"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5a1 1 0 0 1 1.5-.86l10 6a1 1 0 0 1 0 1.72l-10 6A1 1 0 0 1 8 17.5Z"/></svg>تشغيل الآن</button>
+    <div id="result" role="status" aria-live="polite">جاهز للتشغيل ✅</div>
+    <div id="files"></div>
+</main>
 
 <script>
 function updateCounterDisplay(page, year){
