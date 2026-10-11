@@ -169,6 +169,7 @@ input::placeholder{color:rgba(255,255,255,.65)}
 <div class="card">
     <h1>QTTY Recap</h1>
     <p>يقرأ الإيميلات الجديدة، يجهز ملفات الإكسيل، ويرقم الصفحات تلقائيًا حسب سنة الشحن من عمود Delivery Date.</p>
+    <p>{{ last_page_message }}</p>
     <button class="run-btn" onclick="runProcess()">تشغيل الآن</button>
     <div id="result">جاهز للتشغيل ✅</div>
     <div id="files"></div>
@@ -916,9 +917,33 @@ def process_all():
     }
 
 
+def get_last_page_title():
+    sheet = get_google_sheet()
+    rows = sheet.get("F2:G")
+
+    for row in reversed(rows):
+        if len(row) < 2:
+            continue
+        year, page = (str(value).strip() for value in row[:2])
+        if year.isdigit() and page.isdigit() and int(page) > 0:
+            return f"PAGE {int(page)}/{year[-2:]}"
+
+    return None
+
+
 @app.route("/")
 def home():
-    return render_template_string(HOME_HTML)
+    try:
+        last_page = get_last_page_title()
+        last_page_message = (
+            f"آخر صفحة تم تحميلها: {last_page}"
+            if last_page else "لا توجد صفحات تم تحميلها بعد."
+        )
+    except Exception:
+        log(traceback.format_exc())
+        last_page_message = "تعذر معرفة رقم آخر صفحة تم تحميلها الآن."
+
+    return render_template_string(HOME_HTML, last_page_message=last_page_message)
 
 
 @app.route("/run")
