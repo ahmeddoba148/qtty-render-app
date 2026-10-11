@@ -2,7 +2,6 @@ import os
 import re
 import json
 import hashlib
-import hmac
 import imaplib
 import email
 import datetime
@@ -89,10 +88,8 @@ label{display:block;min-width:0}
 label>span{display:block;margin-bottom:6px;font-size:11px;color:var(--muted)}
 input{width:100%;min-width:0;min-height:45px;padding:10px 12px;border:1px solid #ffffff20;border-radius:9px;background:#ffffff05;color:var(--text);font-size:16px}
 input[type=number]{direction:ltr;text-align:center}
-input[type=password]{direction:ltr}
 input::placeholder{color:#829894;font-size:12px}
 input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px #a3e5d212}
-.password-field{margin-bottom:14px}
 .small-note{font-size:11px;color:var(--muted);line-height:1.9;margin-top:11px}
 @media(max-width:400px){body{padding:20px 12px}.card{padding:23px 18px;border-radius:21px}.counter-value{font-size:16px}.file-card{padding:14px}.inputs{grid-template-columns:1fr}.brand{margin-bottom:23px}}
 @media(max-height:650px){body{align-items:flex-start}}
@@ -119,7 +116,6 @@ input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px #a3e5d2
             <label><span>رقم آخر صفحة</span><input id="counter-page" type="number" min="0" step="1" placeholder="رقم الصفحة" value="{{ last_page_number }}"></label>
             <label><span>السنة</span><input id="counter-year" type="number" min="2000" max="2099" step="1" placeholder="السنة" value="{{ last_page_year }}"></label>
         </div>
-        <label class="password-field"><span>كلمة مرور الحفظ</span><input id="counter-password" type="password" autocomplete="current-password" placeholder="كلمة المرور"></label>
         <div class="actions">
             <button class="save-btn" id="counter-save-btn" onclick="savePageCounter()">حفظ</button>
             <button class="cancel-btn" onclick="document.getElementById('counter-edit-box').style.display='none'">إلغاء</button>
@@ -146,9 +142,7 @@ async function savePageCounter(){
         return;
     }
 
-    const password = document.getElementById("counter-password").value;
-    if(!password){
-        alert("اكتب كلمة مرور تعديل العداد");
+    if(!confirm("تأكيد حفظ آخر صفحة برقم " + page + " لسنة " + year + "؟\\nالصفحة التالية ستكون " + (Number(page) + 1) + ".")){
         return;
     }
     const button = document.getElementById("counter-save-btn");
@@ -157,14 +151,13 @@ async function savePageCounter(){
         const res = await fetch("/update-counter", {
             method:"POST",
             headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({page, year, password})
+            body:JSON.stringify({page, year})
         });
         const data = await res.json();
         if(!res.ok || !data.success){
             throw new Error(data.message || "تعذر حفظ رقم الصفحة");
         }
         updateCounterDisplay(data.page, data.year);
-        document.getElementById("counter-password").value = "";
         document.getElementById("counter-edit-box").style.display = "none";
         alert("تم الحفظ ✅ الصفحة التالية ستكون " + data.next_page);
     }catch(e){
@@ -976,15 +969,6 @@ def update_counter():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify({"success": False, "message": "بيانات غير صالحة"}), 400
-
-    expected_password = os.environ.get("COUNTER_EDIT_PASSWORD", "")
-    if not expected_password:
-        return jsonify({"success": False, "message": "حفظ العداد غير مفعّل حاليًا"}), 503
-    password = data.get("password")
-    if not isinstance(password, str) or not hmac.compare_digest(
-        password.encode("utf-8"), expected_password.encode("utf-8")
-    ):
-        return jsonify({"success": False, "message": "كلمة المرور غير صحيحة"}), 403
 
     page_text = str(data.get("page", "")).strip()
     year_text = str(data.get("year", "")).strip()
