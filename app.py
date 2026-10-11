@@ -53,140 +53,151 @@ HOME_HTML = """
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>QTTY Recap</title>
 <style>
+:root{--ink:#172b3a;--muted:#647685;--teal:#0d7968;--line:#e2e9ee;--surface:#fff;--radius:22px}
 *{box-sizing:border-box}
-body{
-    margin:0;
-    min-height:100vh;
-    font-family:Arial,Tahoma,sans-serif;
-    background:linear-gradient(135deg,#0f172a,#1e3a8a);
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    color:white;
-}
-.card{
-    width:94%;
-    max-width:620px;
-    background:rgba(255,255,255,0.12);
-    border:1px solid rgba(255,255,255,0.2);
-    border-radius:28px;
-    padding:28px;
-    text-align:center;
-    box-shadow:0 20px 60px rgba(0,0,0,0.35);
-}
-h1{font-size:28px;margin-bottom:10px}
-p{opacity:.9;line-height:1.7}
-button{
-    border:0;
-    border-radius:14px;
-    color:white;
-    font-size:17px;
-    font-weight:bold;
-    cursor:pointer;
-}
-.run-btn{
-    width:100%;
-    padding:18px;
-    background:#22c55e;
-    font-size:22px;
-    margin-top:18px;
-}
-#result{
-    margin-top:20px;
-    background:rgba(0,0,0,0.25);
-    border-radius:16px;
-    padding:15px;
-    min-height:50px;
-    white-space:pre-line;
-    text-align:center;
-}
-.file-card{
-    margin-top:14px;
-    background:rgba(255,255,255,.12);
-    border:1px solid rgba(255,255,255,.18);
-    border-radius:16px;
-    padding:14px;
-    text-align:right;
-}
-.file-name{
-    font-size:14px;
-    opacity:.95;
-    word-break:break-all;
-    margin-bottom:12px;
-}
-.actions{
-    display:flex;
-    gap:8px;
-    justify-content:center;
-    flex-wrap:wrap;
-}
-.download-btn,.edit-btn,.save-btn,.cancel-btn{
-    display:inline-flex;
-    align-items:center;
-    justify-content:center;
-    gap:6px;
-    padding:11px 14px;
-    border-radius:12px;
-    text-decoration:none;
-    font-weight:bold;
-    color:white;
-    min-width:92px;
-}
-.download-btn{background:#38bdf8}
-.edit-btn{background:#f59e0b}
-.save-btn{background:#22c55e}
-.cancel-btn{background:#64748b}
-.edit-box{
-    margin-top:12px;
-    display:none;
-    background:rgba(0,0,0,.22);
-    border-radius:14px;
-    padding:12px;
-}
-.inputs{
-    display:flex;
-    gap:8px;
-    margin-bottom:10px;
-}
-input{
-    width:100%;
-    padding:12px;
-    border-radius:10px;
-    border:1px solid rgba(255,255,255,.25);
-    background:rgba(255,255,255,.12);
-    color:white;
-    font-size:16px;
-    text-align:center;
-}
-input::placeholder{color:rgba(255,255,255,.65)}
-.small-note{
-    font-size:13px;
-    opacity:.8;
-    margin-top:8px;
-}
+html{color-scheme:light}
+body{margin:0;min-height:100vh;min-height:100svh;background:#f5f8fa;color:var(--ink);font-family:Tahoma,Arial,sans-serif;line-height:1.7}
+button,input,a{-webkit-tap-highlight-color:transparent}
+button,input{font:inherit}
+button,a{touch-action:manipulation}
+button{border:0;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}
+button,a,input{transition:background .18s,border-color .18s,box-shadow .18s,transform .18s}
+button:focus-visible,a:focus-visible{outline:3px solid #37b6a3;outline-offset:4px}
+input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px #0d796815}
+svg{display:block;flex-shrink:0}
+.card{width:min(1120px,100%);margin:auto;padding:0 32px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:25px 0;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.logo{width:48px;height:48px;filter:drop-shadow(0 4px 7px #0d796818)}
+.brand-name{margin:0;font:bold 21px Arial,sans-serif;letter-spacing:-.5px;direction:ltr;text-align:right}
+.brand-caption{margin:1px 0 0;font-size:11px;color:var(--muted)}
+.top-note{display:flex;align-items:center;gap:8px;color:var(--teal);font-size:12px;background:#e6f2ee;padding:7px 13px;border-radius:30px}
+.top-note span{height:6px;width:6px;border-radius:50%;background:var(--teal)}
+.hero{padding:42px 0 32px;max-width:780px}
+.eyebrow{display:flex;align-items:center;gap:9px;margin:0 0 12px;color:var(--teal);font-size:12px;font-weight:bold}
+.eyebrow::before{content:"";width:24px;height:2px;background:var(--teal)}
+h1{font-size:clamp(25px,3.3vw,38px);line-height:1.55;letter-spacing:-1px;margin:0 0 12px}
+.hero-description{margin:0;color:var(--muted);max-width:660px;font-size:14px;line-height:1.9}
+.dashboard{display:grid;grid-template-columns:1.1fr 1fr;gap:22px;align-items:start}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:26px;min-width:0;box-shadow:0 6px 24px #172b3a03}
+.panel-heading{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.panel-icon{display:flex;align-items:center;justify-content:center;width:43px;height:43px;border-radius:13px;background:#edf5f2;color:var(--teal);flex-shrink:0}
+h2{margin:0;font-size:17px;line-height:1.6}
+.panel-caption{margin:2px 0 0;color:var(--muted);font-size:12px}
+.counter-value{padding:22px 16px;margin:0 0 16px;background:#f4f8f7;border:1px solid #e3eeea;border-radius:16px;text-align:center;color:#176757;font-size:20px;font-weight:bold;line-height:1.8;overflow-wrap:anywhere;unicode-bidi:plaintext}
+.counter-edit-btn{width:100%;background:white;color:var(--teal);border:1px solid #c6ddd5}
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+.download-btn,.edit-btn,.save-btn,.cancel-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 17px;border-radius:11px;text-decoration:none;font-size:13px;font-weight:bold;min-height:46px;max-width:100%}
+.download-btn,.save-btn{background:var(--teal);color:white}
+.edit-btn{background:#edf5f2;color:var(--teal)}
+.cancel-btn{background:#edf1f5;color:#526471}
+.counter-edit-btn{background:white;border:1px solid #c6ddd5}
+.download-btn:hover,.save-btn:hover{background:#096353}
+.edit-btn:hover{background:#e0eee8}
+.cancel-btn:hover{background:#dfe6ec}
+.edit-box{display:none;margin-top:18px;border-top:1px solid var(--line);padding-top:18px}
+.inputs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+label{display:block;min-width:0}
+label>span{display:block;margin-bottom:6px;font-size:12px;color:#425b68;font-weight:bold}
+input{width:100%;min-width:0;max-width:100%;padding:11px 12px;border:1px solid #d6e1e7;border-radius:10px;background:#fff;color:var(--ink);font-size:16px;line-height:1.5;text-align:right;min-height:46px}
+input[type=number]{direction:ltr;text-align:center}
+input[type=password]{direction:ltr}
+input::placeholder{color:#8696a1;font-size:13px}
+.password-field{margin-bottom:16px}
+.small-note{font-size:11px;line-height:1.9;color:var(--muted);margin-top:12px}
+.run-panel{background:#153b3a;border-color:#153b3a;color:white;position:relative;overflow:hidden}
+.run-panel::after{content:"";position:absolute;left:-54px;top:-100px;width:230px;height:230px;border-radius:50%;border:35px solid #ffffff04;pointer-events:none}
+.run-panel .panel-icon{background:#ffffff12;color:#96ddca}
+.run-panel .panel-caption{color:#bfd0cf}
+.run-description{margin:0;color:#d1dedd;font-size:13px;line-height:1.95}
+.workflow{display:flex;align-items:center;gap:9px;margin:23px 0;color:#b9d1cc;font-size:11px;flex-wrap:wrap}
+.workflow span{display:flex;align-items:center;gap:6px}
+.workflow b{font-weight:normal;opacity:.55}
+.run-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:54px;padding:13px 18px;border-radius:13px;background:#a6e6cb;color:#123c32;font-size:16px;font-weight:bold}
+.run-btn:hover{background:#bff1dd;transform:translateY(-1px)}
+.run-note{margin:12px 0 0;color:#b9ccca;font-size:11px;text-align:center}
+.results-panel{margin-top:22px;margin-bottom:28px}
+.results-panel .panel-heading{margin-bottom:16px}
+#result{background:#f6f8fb;border:1px solid #e9eef2;border-radius:13px;padding:17px;color:#526775;font-size:13px;min-height:58px;white-space:pre-line;overflow-wrap:anywhere}
+#files{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+#files:empty{display:none}
+.file-card{min-width:0;margin-top:16px;padding:19px;border:1px solid var(--line);border-radius:16px;background:#fff;text-align:right}
+.file-name{font-family:Arial,Tahoma,sans-serif;direction:ltr;text-align:left;font-size:14px;font-weight:bold;overflow-wrap:anywhere;margin-bottom:18px;color:#284352}
+.file-card .actions>*{flex:1}
+.file-card .small-note{font-size:11px}
+footer{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid var(--line);padding:18px 0 26px;color:#80919c;font-size:11px}
+.footer-brand{font:bold 12px Arial,sans-serif;letter-spacing:.5px}
+@media(min-width:1600px){.card{width:min(1240px,100%)}.hero{padding-top:55px}}
+@media(max-width:720px){.card{padding:0 20px}.topbar{padding:20px 0}.hero{padding:30px 0 25px}.dashboard{grid-template-columns:1fr;gap:16px}.panel{padding:23px}.hero-description{font-size:13px}.results-panel{margin-top:16px}#files{grid-template-columns:1fr}.top-note{font-size:11px;padding:6px 10px}}
+@media(max-width:400px){.card{padding:0 14px}.top-note{display:none}.panel{padding:18px;border-radius:18px}.hero{padding-top:24px}h1{font-size:25px}.counter-value{font-size:18px;padding:18px 12px}.inputs{grid-template-columns:1fr}.actions>*{flex:1}.file-card{padding:15px}footer{flex-direction:column;align-items:flex-start;gap:5px}.brand-name{font-size:20px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}.run-btn:hover{transform:none}}
 </style>
 </head>
 <body>
 <div class="card">
-    <h1>QTTY Recap</h1>
-    <p>يقرأ الإيميلات الجديدة، يجهز ملفات الإكسيل، ويرقم الصفحات تلقائيًا حسب سنة الشحن من عمود Delivery Date.</p>
-    <p id="last-page-message">{{ last_page_message }}</p>
-    <button class="edit-btn" onclick="document.getElementById('counter-edit-box').style.display='block'">✏️ تعديل رقم الصفحة</button>
-    <div class="edit-box" id="counter-edit-box">
-        <div class="inputs">
-            <input id="counter-page" type="number" min="0" step="1" aria-label="رقم آخر صفحة" placeholder="رقم آخر صفحة" value="{{ last_page_number }}">
-            <input id="counter-year" type="number" min="2000" max="2099" step="1" aria-label="السنة" placeholder="السنة" value="{{ last_page_year }}">
+    <header class="topbar">
+        <div class="brand">
+            <svg class="logo" viewBox="0 0 48 48" role="img" aria-label="شعار QTTY Recap">
+                <rect width="48" height="48" rx="15" fill="#0d7968"/>
+                <path d="M16 10h12l7 7v19a2 2 0 0 1-2 2H16a2 2 0 0 1-2-2V12a2 2 0 0 1 2-2Z" fill="#fff"/>
+                <path d="M28 10v7h7" fill="#bde4d7"/>
+                <path d="M19 23h11M19 28h11M19 33h6M23 21v13" stroke="#0d7968" stroke-width="1.8" stroke-linecap="round"/>
+                <circle cx="35" cy="35" r="8" fill="#a6e6cb" stroke="#0d7968" stroke-width="2"/>
+                <path d="m32 35 2 2 4-4" fill="none" stroke="#0d7968" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <div><p class="brand-name">QTTY Recap</p><p class="brand-caption">إدارة ملفات الشحن وترقيم الصفحات</p></div>
         </div>
-        <input id="counter-password" type="password" autocomplete="current-password" aria-label="كلمة مرور تعديل العداد" placeholder="كلمة مرور تعديل العداد">
-        <div class="actions">
-            <button class="save-btn" id="counter-save-btn" onclick="savePageCounter()">حفظ</button>
-            <button class="cancel-btn" onclick="document.getElementById('counter-edit-box').style.display='none'">إلغاء</button>
+        <div class="top-note"><span aria-hidden="true"></span>تفاصيل أقل، تنظيم أكثر</div>
+    </header>
+    <main>
+        <section class="hero">
+            <p class="eyebrow">من البريد إلى ملف جاهز</p>
+            <h1>ملفات مرتبة، وصفحات محسوبة.</h1>
+            <p class="hero-description">جهّز ملفات الإكسيل من الإيميلات الجديدة، وتابع ترقيم الصفحات حسب سنة الشحن من عمود <bdi>Delivery Date</bdi>، في مكان واحد.</p>
+        </section>
+        <div class="dashboard">
+            <section class="panel counter-panel" aria-labelledby="counter-heading">
+                <div class="panel-heading">
+                    <span class="panel-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M9 3 7 21M17 3l-2 18M3 9h18M2 15h18"/></svg></span>
+                    <div><h2 id="counter-heading">عداد الصفحات</h2><p class="panel-caption">تابع آخر رقم واضبط بداية الصفحة التالية</p></div>
+                </div>
+                <p class="counter-value" id="last-page-message" aria-live="polite">{{ last_page_message }}</p>
+                <button class="edit-btn counter-edit-btn" onclick="document.getElementById('counter-edit-box').style.display='block'"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15l-1 5Z"/></svg>تعديل رقم الصفحة</button>
+                <div class="edit-box" id="counter-edit-box">
+                    <div class="inputs">
+                        <label><span>رقم آخر صفحة</span><input id="counter-page" type="number" min="0" step="1" placeholder="مثال: 100" value="{{ last_page_number }}"></label>
+                        <label><span>سنة الشحن</span><input id="counter-year" type="number" min="2000" max="2099" step="1" placeholder="السنة" value="{{ last_page_year }}"></label>
+                    </div>
+                    <label class="password-field"><span>كلمة مرور تعديل العداد</span><input id="counter-password" type="password" autocomplete="current-password" placeholder="أدخل كلمة المرور للحفظ"></label>
+                    <div class="actions">
+                        <button class="save-btn" id="counter-save-btn" onclick="savePageCounter()">حفظ الرقم</button>
+                        <button class="cancel-btn" onclick="document.getElementById('counter-edit-box').style.display='none'">إلغاء</button>
+                    </div>
+                    <div class="small-note">الصفحة التالية لنفس السنة ستكون الرقم المكتوب + 1.</div>
+                </div>
+            </section>
+            <section class="panel run-panel" aria-labelledby="run-heading">
+                <div class="panel-heading">
+                    <span class="panel-icon" aria-hidden="true"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m4 7 8 6 8-6"/></svg></span>
+                    <div><h2 id="run-heading">جهّز ملفاتك بضغطة</h2><p class="panel-caption">معالجة الإيميلات الجديدة تلقائيًا</p></div>
+                </div>
+                <p class="run-description">ابدأ قراءة البريد وتجهيز ملفات الإكسيل. الملفات الجاهزة هتظهر هنا للتحميل أو تعديل رقم الصفحة.</p>
+                <div class="workflow" aria-label="مراحل تجهيز الملفات"><span>01 · قراءة البريد</span><b aria-hidden="true">←</b><span>02 · تجهيز الملفات</span><b aria-hidden="true">←</b><span>03 · التحميل</span></div>
+                <button class="run-btn" onclick="runProcess()"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5a1 1 0 0 1 1.5-.86l10 6a1 1 0 0 1 0 1.72l-10 6A1 1 0 0 1 8 17.5Z"/></svg>تشغيل الآن</button>
+                <p class="run-note">الترقيم تلقائي حسب سنة الشحن لكل ملف</p>
+            </section>
         </div>
-        <div class="small-note">الصفحة التالية لنفس السنة ستكون الرقم المكتوب + 1.</div>
-    </div>
-    <button class="run-btn" onclick="runProcess()">تشغيل الآن</button>
-    <div id="result">جاهز للتشغيل ✅</div>
-    <div id="files"></div>
+        <section class="panel results-panel" aria-labelledby="files-heading">
+            <div class="panel-heading">
+                <span class="panel-icon" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg></span>
+                <div><h2 id="files-heading">الملفات الجاهزة</h2><p class="panel-caption">نتيجة التشغيل وروابط تحميل ملفات الإكسيل</p></div>
+            </div>
+            <div id="result" role="status" aria-live="polite">جاهز للتشغيل ✅</div>
+            <div id="files"></div>
+        </section>
+    </main>
+    <footer><span class="footer-brand" dir="ltr">QTTY RECAP</span><span>من الإيميل إلى الإكسيل، بخطوات أبسط.</span></footer>
 </div>
 
 <script>
