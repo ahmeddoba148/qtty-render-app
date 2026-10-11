@@ -2,6 +2,7 @@ import os
 import re
 import json
 import hashlib
+import hmac
 import imaplib
 import email
 import datetime
@@ -169,13 +170,68 @@ input::placeholder{color:rgba(255,255,255,.65)}
 <div class="card">
     <h1>QTTY Recap</h1>
     <p>يقرأ الإيميلات الجديدة، يجهز ملفات الإكسيل، ويرقم الصفحات تلقائيًا حسب سنة الشحن من عمود Delivery Date.</p>
-    <p>{{ last_page_message }}</p>
+    <p id="last-page-message">{{ last_page_message }}</p>
+    <button class="edit-btn" onclick="document.getElementById('counter-edit-box').style.display='block'">✏️ تعديل رقم الصفحة</button>
+    <div class="edit-box" id="counter-edit-box">
+        <div class="inputs">
+            <input id="counter-page" type="number" min="0" step="1" aria-label="رقم آخر صفحة" placeholder="رقم آخر صفحة" value="{{ last_page_number }}">
+            <input id="counter-year" type="number" min="2000" max="2099" step="1" aria-label="السنة" placeholder="السنة" value="{{ last_page_year }}">
+        </div>
+        <input id="counter-password" type="password" autocomplete="current-password" aria-label="كلمة مرور تعديل العداد" placeholder="كلمة مرور تعديل العداد">
+        <div class="actions">
+            <button class="save-btn" id="counter-save-btn" onclick="savePageCounter()">حفظ</button>
+            <button class="cancel-btn" onclick="document.getElementById('counter-edit-box').style.display='none'">إلغاء</button>
+        </div>
+        <div class="small-note">الصفحة التالية لنفس السنة ستكون الرقم المكتوب + 1.</div>
+    </div>
     <button class="run-btn" onclick="runProcess()">تشغيل الآن</button>
     <div id="result">جاهز للتشغيل ✅</div>
     <div id="files"></div>
 </div>
 
 <script>
+function updateCounterDisplay(page, year){
+    document.getElementById("last-page-message").innerText = "آخر صفحة تم تحميلها: PAGE " + page + "/" + String(year).slice(-2);
+    document.getElementById("counter-page").value = page;
+    document.getElementById("counter-year").value = year;
+}
+
+async function savePageCounter(){
+    const page = document.getElementById("counter-page").value.trim();
+    const year = document.getElementById("counter-year").value.trim();
+    if(!/^[0-9]+$/.test(page) || !/^[0-9]{4}$/.test(year) || Number(year) < 2000 || Number(year) > 2099){
+        alert("اكتب رقم صفحة صحيحًا من صفر وسنة بين 2000 و2099");
+        return;
+    }
+
+    const password = document.getElementById("counter-password").value;
+    if(!password){
+        alert("اكتب كلمة مرور تعديل العداد");
+        return;
+    }
+    const button = document.getElementById("counter-save-btn");
+    button.disabled = true;
+    try{
+        const res = await fetch("/update-counter", {
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({page, year, password})
+        });
+        const data = await res.json();
+        if(!res.ok || !data.success){
+            throw new Error(data.message || "تعذر حفظ رقم الصفحة");
+        }
+        updateCounterDisplay(data.page, data.year);
+        document.getElementById("counter-password").value = "";
+        document.getElementById("counter-edit-box").style.display = "none";
+        alert("تم الحفظ ✅ الصفحة التالية ستكون " + data.next_page);
+    }catch(e){
+        alert("حدث خطأ أثناء الحفظ: " + e.message);
+    }finally{
+        button.disabled = false;
+    }
+}
+
 function escapeHtml(text){
     return String(text)
         .replaceAll("&","&amp;")
@@ -272,6 +328,8 @@ async function runProcess(){
 
         if(data.success && data.files && data.files.length){
             renderFiles(data.files);
+            const lastFile = data.files[data.files.length - 1];
+            updateCounterDisplay(lastFile.page, lastFile.year);
         }
 
     }catch(e){
@@ -920,30 +978,107 @@ def process_all():
 def get_last_page_title():
     sheet = get_google_sheet()
     rows = sheet.get("F2:G")
+    counters = sheet.get("A2:B")
 
     for row in reversed(rows):
         if len(row) < 2:
             continue
         year, page = (str(value).strip() for value in row[:2])
         if year.isdigit() and page.isdigit() and int(page) > 0:
+            for counter in counters:
+                if len(counter) >= 2 and str(counter[0]).strip() == year:
+                    counter_page = str(counter[1]).strip()
+                    if counter_page.isdigit():
+                        page = counter_page
+                    break
             return f"PAGE {int(page)}/{year[-2:]}"
+
+    for counter in reversed(counters):
+        if len(counter) >= 2:
+            year, page = (str(value).strip() for value in counter[:2])
+            if year.isdigit() and page.isdigit():
+                return f"PAGE {int(page)}/{year[-2:]}"
 
     return None
 
 
 @app.route("/")
 def home():
+    last_page_number = ""
+    last_page_year = CURRENT_YEAR
     try:
         last_page = get_last_page_title()
         last_page_message = (
             f"آخر صفحة تم تحميلها: {last_page}"
             if last_page else "لا توجد صفحات تم تحميلها بعد."
         )
+        if last_page:
+            match = re.fullmatch(r"PAGE (\d+)/(\d{2})", last_page)
+            if match:
+                last_page_number = int(match.group(1))
+                last_page_year = int("20" + match.group(2))
     except Exception:
         log(traceback.format_exc())
         last_page_message = "تعذر معرفة رقم آخر صفحة تم تحميلها الآن."
 
-    return render_template_string(HOME_HTML, last_page_message=last_page_message)
+    return render_template_string(
+        HOME_HTML,
+        last_page_message=last_page_message,
+        last_page_number=last_page_number,
+        last_page_year=last_page_year
+    )
+
+
+@app.route("/update-counter", methods=["POST"])
+def update_counter():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"success": False, "message": "بيانات غير صالحة"}), 400
+
+    expected_password = os.environ.get("COUNTER_EDIT_PASSWORD", "")
+    if not expected_password:
+        return jsonify({"success": False, "message": "حفظ العداد غير مفعّل حاليًا"}), 503
+    password = data.get("password")
+    if not isinstance(password, str) or not hmac.compare_digest(
+        password.encode("utf-8"), expected_password.encode("utf-8")
+    ):
+        return jsonify({"success": False, "message": "كلمة المرور غير صحيحة"}), 403
+
+    page_text = str(data.get("page", "")).strip()
+    year_text = str(data.get("year", "")).strip()
+    if not re.fullmatch(r"[0-9]+", page_text) or not re.fullmatch(r"20[0-9]{2}", year_text):
+        return jsonify({
+            "success": False,
+            "message": "اكتب رقم صفحة صحيحًا من صفر وسنة بين 2000 و2099"
+        }), 400
+
+    try:
+        page = int(page_text)
+        year = int(year_text)
+        sheet = get_google_sheet()
+        years = sheet.col_values(1)
+        row_index = next(
+            (i for i, value in enumerate(years[1:], start=2) if str(value).strip() == str(year)),
+            None
+        )
+        if row_index is None:
+            row_index = max(len(years) + 1, 2)
+            sheet.update(f"A{row_index}:B{row_index}", [[str(year), page]])
+        else:
+            sheet.update(f"B{row_index}", [[page]])
+
+        return jsonify({
+            "success": True,
+            "page": page,
+            "year": year,
+            "next_page": page + 1
+        })
+    except Exception:
+        log(traceback.format_exc())
+        return jsonify({
+            "success": False,
+            "message": "تعذر حفظ رقم الصفحة الآن. حاول مرة أخرى."
+        }), 500
 
 
 @app.route("/run")
